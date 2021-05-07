@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
 
-import '@uniswap/v3-core/contracts/libraries/LowGasSafeMath.sol';
+import './uniswap-v3/libraries/LowGasSafeMath.sol';
 
 contract ERC20 {
     using LowGasSafeMath for uint;

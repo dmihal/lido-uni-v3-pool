@@ -1,14 +1,14 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
 
-import { IUniswapV3Pool } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import { IUniswapV3Factory } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
-import { IUniswapV3MintCallback } from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
-import { LowGasSafeMath } from "@uniswap/v3-core/contracts/libraries/LowGasSafeMath.sol";
-import { IUniswapV3SwapCallback } from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol";
-import { TickMath } from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
+import { IUniswapV3Pool } from "./uniswap-v3/interfaces/IUniswapV3Pool.sol";
+import { IUniswapV3Factory } from "./uniswap-v3/interfaces/IUniswapV3Factory.sol";
+import { IUniswapV3MintCallback } from "./uniswap-v3/interfaces/callback/IUniswapV3MintCallback.sol";
+import { IUniswapV3SwapCallback } from "./uniswap-v3/interfaces/callback/IUniswapV3SwapCallback.sol";
+import { LowGasSafeMath } from "./uniswap-v3/libraries/LowGasSafeMath.sol";
+import { TickMath } from "./uniswap-v3/libraries/TickMath.sol";
+import { IERC20Minimal } from './uniswap-v3/interfaces/IERC20Minimal.sol';
 
-import { IMetaPoolFactory } from "./interfaces/IMetaPoolFactory.sol";
 import { TransferHelper } from "./libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./libraries/LiquidityAmounts.sol";
 import { ERC20 } from "./ERC20.sol";
@@ -254,8 +254,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
     // Query the actual balances, so we can soop up any un-deposited
     // tokens from the last rebalance
-    uint256 amount0 = ERC20(token0).balanceOf(address(this));
-    uint256 amount1 = ERC20(token1).balanceOf(address(this));
+    uint256 amount0 = IERC20Minimal(token0).balanceOf(address(this));
+    uint256 amount1 = IERC20Minimal(token1).balanceOf(address(this));
 
     {
       uint256 tightAmount0Desired = amount0.mul(8000) / 10000; // 80%
