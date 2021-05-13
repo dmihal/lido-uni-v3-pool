@@ -143,16 +143,20 @@ describe('MetaPools', function() {
         const token0Desired = token0DesiredTight + token0DesiredWide;
         const token1Desired = token1DesiredTight + token1DesiredWide;
 
-        await metaPool.mint(token0Desired, token1Desired, '0', '0');
+        await metaPool.mint(token0Desired, '0', '0');
 
         const tightPositionAmounts = await metaPool.tightPosition();
         const widePositionAmounts = await metaPool.widePosition();
         // tightPosition & widePosition rounds down, so we need to add 1 unit of tollerance
-        expect(parseInt(tightPositionAmounts.token0.toString())).to.be.closeTo(token0DesiredTight, 1);
-        expect(parseInt(tightPositionAmounts.token1.toString())).to.be.closeTo(token1DesiredTight, 1);
+        expect(parseInt(tightPositionAmounts.token0Amount.toString()))
+          .to.be.closeTo(token0DesiredTight, 1);
+        expect(parseInt(tightPositionAmounts.token1Amount.toString()))
+          .to.be.closeTo(token1DesiredTight, 1);
         expect(tightPositionAmounts.liquidity).to.equal(tightPosition.liquidity.toString());
-        expect(parseInt(widePositionAmounts.token0.toString())).to.be.closeTo(token0DesiredWide, 1);
-        expect(parseInt(widePositionAmounts.token1.toString())).to.be.closeTo(token1DesiredWide, 1);
+        expect(parseInt(widePositionAmounts.token0Amount.toString()))
+          .to.be.closeTo(token0DesiredWide, 1);
+        expect(parseInt(widePositionAmounts.token1Amount.toString()))
+          .to.be.closeTo(token1DesiredWide, 1);
         expect(widePositionAmounts.liquidity).to.equal(widePosition.liquidity.toString());
 
         expect(await token0.balanceOf(uniswapPool.address)).to.equal(token0Desired);
@@ -184,7 +188,6 @@ describe('MetaPools', function() {
         });
         const token0DesiredTight2 = parseInt(tightPosition2.mintAmounts.amount0.toString());
         const token1DesiredTight2 = parseInt(tightPosition2.mintAmounts.amount1.toString());
-        console.log({token0DesiredTight2, token1DesiredTight2})
 
         const widePosition2 = Position.fromAmount0({
           pool: jsPool,
@@ -194,24 +197,29 @@ describe('MetaPools', function() {
         });
         const token0DesiredWide2 = parseInt(widePosition2.mintAmounts.amount0.toString());
         const token1DesiredWide2 = parseInt(widePosition2.mintAmounts.amount1.toString());
-        console.log({token0DesiredWide2, token1DesiredWide2})
 
         const token0Desired2 = token0DesiredTight2 + token0DesiredWide2;
         const token1Desired2 = token1DesiredTight2 + token1DesiredWide2;
 
-        await metaPool.mint(token0Desired2, token1Desired2, '0', '0');
+        await metaPool.mint(token0Desired2, '0', '0');
 
         const tightPositionAmounts2 = await metaPool.tightPosition();
         const widePositionAmounts2 = await metaPool.widePosition();
         // tightPosition & widePosition rounds down, so we need to add 1 unit of tollerance
-        expect(parseInt(tightPositionAmounts2.token0)).to.be.closeTo(token0DesiredTight + token0DesiredTight2, 1);
-        expect(parseInt(tightPositionAmounts2.token1)).to.be.closeTo(token1DesiredTight + token1DesiredTight2, 1);
-        expect(tightPositionAmounts2.liquidity).to.equal(JSBI.add(tightPosition2.liquidity, tightPosition.liquidity).toString());
-        expect(parseInt(widePositionAmounts2.token0)).to.be.closeTo(token0DesiredWide + token0DesiredWide2, 1);
+        expect(parseInt(tightPositionAmounts2.token0Amount))
+          .to.be.closeTo(token0DesiredTight + token0DesiredTight2, 1);
+        expect(parseInt(tightPositionAmounts2.token1Amount))
+          .to.be.closeTo(token1DesiredTight + token1DesiredTight2, 1);
+        expect(tightPositionAmounts2.liquidity)
+          .to.equal(JSBI.add(tightPosition2.liquidity, tightPosition.liquidity).toString());
+        expect(parseInt(widePositionAmounts2.token0Amount))
+          .to.be.closeTo(token0DesiredWide + token0DesiredWide2, 1);
         // The following value is off by 2, instead of 1. I'm pretty sure this is just a rounding issue, but
         // this should probably be double-checked
-        expect(parseInt(widePositionAmounts2.token1)).to.be.closeTo(token1DesiredWide + token1DesiredWide2, 2);
-        expect(widePositionAmounts2.liquidity).to.equal(JSBI.add(widePosition2.liquidity, widePosition.liquidity).toString());
+        expect(parseInt(widePositionAmounts2.token1Amount))
+          .to.be.closeTo(token1DesiredWide + token1DesiredWide2, 2);
+        expect(widePositionAmounts2.liquidity)
+          .to.equal(JSBI.add(widePosition2.liquidity, widePosition.liquidity).toString());
 
         expect(await token0.balanceOf(uniswapPool.address)).to.equal(token0Desired + token0Desired2);
         expect(await token1.balanceOf(uniswapPool.address)).to.equal(token1Desired + token1Desired2);
