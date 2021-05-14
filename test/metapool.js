@@ -297,6 +297,50 @@ describe('MetaPools', function() {
           await swapTest.washTrade(uniswapPool.address, '1000', 100, 2);
         });
 
+        describe('withdrawal', function() {
+          it('should burn LP tokens and withdraw funds', async function() {
+            const startingSupply = await metaPool.totalSupply();
+
+            const startingTightPositionAmounts = await metaPool.tightPosition();
+            const startingWidePositionAmounts = await metaPool.widePosition();
+
+            const lpTokens = await metaPool.balanceOf(await user0.getAddress());
+            const lpTokensToBurn = Math.floor(lpTokens * .6);
+            await metaPool.burn(lpTokensToBurn, 0, 0, MAX_INT, EMPTY_ADDRESS);
+
+            const endTightPositionAmounts = await metaPool.tightPosition();
+            const endWidePositionAmounts = await metaPool.widePosition();
+
+            expect(parseInt(endTightPositionAmounts.token0Amount.toString()))
+              .to.be.closeTo(Math.round(startingTightPositionAmounts.token0Amount * 0.4), 1);
+            expect(parseInt(endTightPositionAmounts.token1Amount.toString()))
+              .to.be.closeTo(Math.round(startingTightPositionAmounts.token1Amount * 0.4), 1);
+            expect(parseInt(endTightPositionAmounts.liquidity.toString()))
+              .to.be.closeTo(Math.round(startingTightPositionAmounts.liquidity * 0.4), 1);
+
+            expect(parseInt(endWidePositionAmounts.token0Amount.toString()))
+              .to.be.closeTo(Math.round(startingWidePositionAmounts.token0Amount * 0.4), 1);
+            expect(parseInt(endWidePositionAmounts.token1Amount.toString()))
+              .to.be.closeTo(Math.round(startingWidePositionAmounts.token1Amount * 0.4), 1);
+            expect(parseInt(endWidePositionAmounts.liquidity.toString()))
+              .to.be.closeTo(Math.round(startingWidePositionAmounts.liquidity * 0.4), 1);
+
+            expect(await metaPool.totalSupply())
+              .to.equal(Math.round(startingSupply * 0.4));
+            expect(await metaPool.balanceOf(await user0.getAddress()))
+              .to.equal(Math.round(startingSupply * 0.4));
+
+            expect(toInt(await token0.balanceOf(EMPTY_ADDRESS)))
+              .to.be.closeTo(Math.round(
+                (toInt(startingWidePositionAmounts.token0Amount) + toInt(startingTightPositionAmounts.token0Amount))
+                * 0.6), 2);
+            expect(toInt(await token1.balanceOf(EMPTY_ADDRESS)))
+              .to.be.closeTo(Math.round(
+                (toInt(startingWidePositionAmounts.token1Amount) + toInt(startingTightPositionAmounts.token1Amount))
+                * 0.6), 2);
+          });
+        });
+
         describe('rebalance', function() {
           it('should redeposit fees with a rebalance', async function() {
             await metaPool.rebalance();
@@ -319,6 +363,50 @@ describe('MetaPools', function() {
           await ethers.provider.send("evm_mine");
 
           await swapTest.washTrade(uniswapPool.address, '1000', 100, 4);
+        });
+
+        describe('withdrawal', function() {
+          it('should burn LP tokens and withdraw funds', async function() {
+            const startingSupply = await metaPool.totalSupply();
+
+            const startingTightPositionAmounts = await metaPool.tightPosition();
+            const startingWidePositionAmounts = await metaPool.widePosition();
+
+            const lpTokens = await metaPool.balanceOf(await user0.getAddress());
+            const lpTokensToBurn = Math.floor(lpTokens * .6);
+            await metaPool.burn(lpTokensToBurn, 0, 0, MAX_INT, EMPTY_ADDRESS);
+
+            const endTightPositionAmounts = await metaPool.tightPosition();
+            const endWidePositionAmounts = await metaPool.widePosition();
+
+            expect(parseInt(endTightPositionAmounts.token0Amount.toString()))
+              .to.be.closeTo(Math.round(startingTightPositionAmounts.token0Amount * 0.4), 1);
+            expect(parseInt(endTightPositionAmounts.token1Amount.toString()))
+              .to.be.closeTo(Math.round(startingTightPositionAmounts.token1Amount * 0.4), 1);
+            expect(parseInt(endTightPositionAmounts.liquidity.toString()))
+              .to.be.closeTo(Math.round(startingTightPositionAmounts.liquidity * 0.4), 1);
+
+            expect(parseInt(endWidePositionAmounts.token0Amount.toString()))
+              .to.be.closeTo(Math.round(startingWidePositionAmounts.token0Amount * 0.4), 1);
+            expect(parseInt(endWidePositionAmounts.token1Amount.toString()))
+              .to.be.closeTo(Math.round(startingWidePositionAmounts.token1Amount * 0.4), 1);
+            expect(parseInt(endWidePositionAmounts.liquidity.toString()))
+              .to.be.closeTo(Math.round(startingWidePositionAmounts.liquidity * 0.4), 1);
+
+            expect(await metaPool.totalSupply())
+              .to.equal(Math.round(startingSupply * 0.4));
+            expect(await metaPool.balanceOf(await user0.getAddress()))
+              .to.equal(Math.round(startingSupply * 0.4));
+
+            expect(toInt(await token0.balanceOf(EMPTY_ADDRESS)))
+              .to.be.closeTo(Math.round(
+                (toInt(startingWidePositionAmounts.token0Amount) + toInt(startingTightPositionAmounts.token0Amount))
+                * 0.6), 2);
+            expect(toInt(await token1.balanceOf(EMPTY_ADDRESS)))
+              .to.be.closeTo(Math.round(
+                (toInt(startingWidePositionAmounts.token1Amount) + toInt(startingTightPositionAmounts.token1Amount))
+                * 0.6), 2);
+          });
         });
 
         describe('rebalance', function() {
