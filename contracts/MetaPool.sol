@@ -169,7 +169,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 burnAmount,
     uint256 amount0Min,
     uint256 amount1Min,
-    uint256 deadline
+    uint256 deadline,
+    address recipient
   ) external returns (uint256 amount0, uint256 amount1) {
     require(deadline >= block.timestamp);
 
@@ -177,22 +178,47 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
     _burn(msg.sender, burnAmount);
 
+    {
+      (uint128 tightLiqiudity,,,,) = pool.positions(tightPositionID);
 
-    // (lpBurn/totalSupply) * liquidity * percent
+      uint256 tightLiquidityBurned = burnAmount.mul(tightLiqiudity) / _totalSupply; // Can't overflow
+      require(tightLiquidityBurned < type(uint128).max); // Check so we can cast to 128
 
-    (uint256 tightAmount0, uint256 tightAmount1) = burnPosition(
-      burnAmount.mul(8e18) / _totalSupply, // 80%
-      tightLowerTick,
-      tightUpperTick
-    );
-    (uint256 wideAmount0, uint256 wideAmount1) = burnPosition(
-      burnAmount.mul(2e18) / _totalSupply, // 20%
-      wideLowerTick,
-      wideUpperTick
-    );
+      (amount0, amount1) = pool.burn(tightLowerTick, tightUpperTick, uint128(tightLiquidityBurned));
 
-    amount0 = tightAmount0 + wideAmount0; // Can't overflow
-    amount1 = tightAmount1 + wideAmount1; // Can't overflow
+      // Withdraw tokens to user
+      pool.collect(
+        recipient,
+        tightLowerTick,
+        tightUpperTick,
+        uint128(amount0), // cast can't overflow
+        uint128(amount1) // cast can't overflow
+      );
+    }
+
+    {
+      (uint128 wideLiquidity,,,,) = pool.positions(widePositionID);
+
+      uint256 wideLiquidityBurned = burnAmount.mul(wideLiquidity) / _totalSupply; // Can't overflow
+      require(wideLiquidityBurned < type(uint128).max); // Check so we can cast to 128
+
+      (uint256 wideAmount0, uint256 wideAmount1) =
+        pool.burn(wideLowerTick, wideUpperTick, uint128(wideLiquidityBurned));
+
+      // Can't overflow
+      amount0 += wideAmount0;
+      amount1 += wideAmount1;
+
+      // Withdraw tokens to user
+      pool.collect(
+        recipient,
+        wideLowerTick,
+        wideUpperTick,
+        uint128(wideAmount0), // cast can't overflow
+        uint128(wideAmount1) // cast can't overflow
+      );
+    }
+
     require(amount0 >= amount0Min && amount1 >= amount1Min, "Slippage");
   }
 
@@ -206,36 +232,6 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   ///
   //  Private functions
   ///
-
-  /// @dev Withdraw liquidity from a single position to the sender
-  /// @param burnRatio The amount of LP tokens burned, multiplied by the total token
-  ///   supply before the burn (this is ugly, but saves gas by preventing multiple SLOADs)
-  /// @param lowerTick The lower tick of the position's tick range
-  /// @param upperTick The upper tick of the position's tick range
-  /// @return amount0 The amount of token0 withdrawn to the sender address
-  /// @return amount1 The amount of token1 withdrawn to the sender address
-  function burnPosition(
-    uint256 burnRatio,
-    int24 lowerTick,
-    int24 upperTick
-  ) private returns (uint256 amount0, uint256 amount1) {
-    bytes32 positionID = keccak256(abi.encodePacked(address(this), lowerTick, upperTick));
-    (uint128 liqiudity,,,,) = pool.positions(positionID);
-
-    uint256 liquidityBurned = burnRatio.mul(liqiudity) / 10e18; // Can't overflow
-    require(liquidityBurned < type(uint128).max); // Check so we can cast to 128
-
-    (amount0, amount1) = pool.burn(lowerTick, upperTick, uint128(liquidityBurned));
-
-    // Withdraw tokens to user
-    pool.collect(
-      msg.sender, // We only ever burn to the user, so we can hardcode msg.sender to save gas
-      lowerTick,
-      upperTick,
-      uint128(amount0), // cast can't overflow
-      uint128(amount1) // cast can't overflow
-    );
-  }
 
   function deposit() private {
     requireMinimalPriceMovement();

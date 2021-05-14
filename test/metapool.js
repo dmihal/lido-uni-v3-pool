@@ -5,6 +5,7 @@ const { BigintIsh, ChainId, Price, Token, TokenAmount } = require('@uniswap/sdk-
 const { Pool, Position, tickToPrice, SqrtPriceMath, TickMath } = require('@uniswap/v3-sdk/dist/');
 const JSBI = require('jsbi');
 
+const EMPTY_ADDRESS = '0x1111111111111111111111111111111111111111';
 
 bn.config({ EXPONENTIAL_AT: 999999, DECIMAL_PLACES: 40 })
 
@@ -44,13 +45,14 @@ const FEE_AMOUNT = 500;
 
 const MAX_INT = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
+const toInt = val => parseInt(val.toString());
+
 describe('MetaPools', function() {
   let uniswapFactory;
   let uniswapPool;
   let token0;
   let token1;
   let metaPoolFactory;
-  const nonExistantToken = '0x1111111111111111111111111111111111111111';
   let user0;
   let user1;
   let swapTest;
@@ -239,7 +241,7 @@ describe('MetaPools', function() {
 
     describe('with liquidity depositted', function() {
       beforeEach(async function() {
-        await metaPool.mint(10000, 10000, 0, 0);
+        await metaPool.mint(10000, 0, 0);
       });
 
       describe('withdrawal', function() {
@@ -247,16 +249,41 @@ describe('MetaPools', function() {
           const startingToken0 = await token0.balanceOf(uniswapPool.address);
           const startingToken1 = await token1.balanceOf(uniswapPool.address);
 
-          const lpTokens = await metaPool.balanceOf(await user0.getAddress());
-          const lpTokensToBurn = Math.floor(lpTokens * 0.4);
-          await metaPool.burn(lpTokensToBurn, 0, 0, MAX_INT);
+          const startingSupply = await metaPool.totalSupply();
 
-          expect(await token0.balanceOf(uniswapPool.address)).to.equal(startingToken0 * 0.6);
-          expect(await token1.balanceOf(uniswapPool.address)).to.equal(startingToken1 * 0.6);
-          // const [liquidity2] = await uniswapPool.positions(position(metaPool.address, -887220, 887220));
-          // expect(liquidity2).to.equal('4000');
-          expect(await metaPool.totalSupply()).to.equal('4000');
-          expect(await metaPool.balanceOf(await user0.getAddress())).to.equal('4000');
+          const startingTightPositionAmounts = await metaPool.tightPosition();
+          const startingWidePositionAmounts = await metaPool.widePosition();
+
+          const lpTokens = await metaPool.balanceOf(await user0.getAddress());
+          const lpTokensToBurn = Math.floor(lpTokens * .6);
+          await metaPool.burn(lpTokensToBurn, 0, 0, MAX_INT, EMPTY_ADDRESS);
+
+          const endTightPositionAmounts = await metaPool.tightPosition();
+          const endWidePositionAmounts = await metaPool.widePosition();
+
+          expect(parseInt(endTightPositionAmounts.token0Amount.toString()))
+            .to.be.closeTo(Math.round(startingTightPositionAmounts.token0Amount * 0.4), 1);
+          expect(parseInt(endTightPositionAmounts.token1Amount.toString()))
+            .to.be.closeTo(Math.round(startingTightPositionAmounts.token1Amount * 0.4), 1);
+          expect(parseInt(endTightPositionAmounts.liquidity.toString()))
+            .to.be.closeTo(Math.round(startingTightPositionAmounts.liquidity * 0.4), 1);
+
+          expect(parseInt(endWidePositionAmounts.token0Amount.toString()))
+            .to.be.closeTo(Math.round(startingWidePositionAmounts.token0Amount * 0.4), 1);
+          expect(parseInt(endWidePositionAmounts.token1Amount.toString()))
+            .to.be.closeTo(Math.round(startingWidePositionAmounts.token1Amount * 0.4), 1);
+          expect(parseInt(endWidePositionAmounts.liquidity.toString()))
+            .to.be.closeTo(Math.round(startingWidePositionAmounts.liquidity * 0.4), 1);
+
+          expect(await metaPool.totalSupply())
+            .to.equal(Math.round(startingSupply * 0.4));
+          expect(await metaPool.balanceOf(await user0.getAddress()))
+            .to.equal(Math.round(startingSupply * 0.4));
+
+          expect(toInt(await token0.balanceOf(EMPTY_ADDRESS)))
+            .to.be.closeTo(Math.round(startingToken0 * 0.6), 2);
+          expect(toInt(await token1.balanceOf(EMPTY_ADDRESS)))
+            .to.be.closeTo(Math.round(startingToken1 * 0.6), 2);
         });
       });
 
