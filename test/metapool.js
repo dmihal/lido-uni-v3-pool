@@ -47,6 +47,26 @@ const MAX_INT = '0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 
 const toInt = val => parseInt(val.toString());
 
+async function logRebalance(call) {
+  const tx = await call;
+  const { events } = await tx.wait();
+  for (const event of events) {
+    switch (event.topics[0]) {
+      case '0x70935338e69775456a85ddef226c395fb668b63fa0115f5f20610b388e6ca9c0':
+        console.log('Rebalance');
+        break;
+
+      case '0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde':
+        console.log('Mint');
+        break;
+
+      case '0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67':
+        console.log('Swap');
+        break;
+    }
+  }
+}
+
 describe('MetaPools', function() {
   let uniswapFactory;
   let uniswapPool;
@@ -343,14 +363,28 @@ describe('MetaPools', function() {
 
         describe('rebalance', function() {
           it('should redeposit fees with a rebalance', async function() {
-            await metaPool.rebalance();
+            const startingPositionAmounts = await metaPool.totalPosition();
+            const startingTightPositionAmounts = await metaPool.tightPosition();
+            const startingWidePositionAmounts = await metaPool.widePosition();
 
-            expect(await token0.balanceOf(uniswapPool.address)).to.equal('10200');
+            await logRebalance(metaPool.rebalance());
+
+            expect(toInt(await token0.balanceOf(uniswapPool.address)))
+              .to.be.closeTo(Math.round(startingPositionAmounts.token0Amount * 1.02), 1);
+            // expect(toInt(await token1.balanceOf(uniswapPool.address)))
+            //   .to.be.closeTo(Math.round(startingPositionAmounts.token1Amount * 1.02), 1);
+
+            //TODO: this should be 0 once the test does true balanced trading
+            expect(toInt(await token0.balanceOf(metaPool.address))).to.be.closeTo(0, 1);
+            // expect(toInt(await token1.balanceOf(metaPool.address))).to.equal(0);
+
+            const endTightPositionAmounts = await metaPool.tightPosition();
+            const endWidePositionAmounts = await metaPool.widePosition();
+
             // expect(await token1.balanceOf(uniswapPool.address)).to.equal('10200');
-            const [liquidityTight] = await uniswapPool.positions(positionIdTight);
-            // expect(liquidityTight).to.equal('10099');
-            const [liquidityWide] = await uniswapPool.positions(positionIdTight);
-            // expect(liquidityWide).to.equal('10099');
+            // TODO: find mathamatical source of these liquidity values
+            expect(endTightPositionAmounts.liquidity).to.equal(322046);
+            expect(endWidePositionAmounts.liquidity).to.equal(39612);
           });
         });
       });
@@ -411,14 +445,35 @@ describe('MetaPools', function() {
 
         describe('rebalance', function() {
           it('should redeposit fees with a rebalance', async function() {
-            await metaPool.rebalance();
+            const startingPositionAmounts = await metaPool.totalPosition();
+            const startingTightPositionAmounts = await metaPool.tightPosition();
+            const startingWidePositionAmounts = await metaPool.widePosition();
 
-            expect(await token0.balanceOf(uniswapPool.address)).to.equal('10299');
-            expect(await token1.balanceOf(uniswapPool.address)).to.equal('10100');
-            const [liquidityTight] = await uniswapPool.positions(positionIdTight);
-            // expect(liquidityTight).to.equal('10099');
-            const [liquidityWide] = await uniswapPool.positions(positionIdTight);
-            // expect(liquidityWide).to.equal('10099');
+            await logRebalance(metaPool.rebalance());
+
+            // expect(toInt(await token0.balanceOf(uniswapPool.address)))
+            //   .to.be.closeTo(Math.round(startingPositionAmounts.token0Amount * 1.02), 1);
+            // expect(toInt(await token1.balanceOf(uniswapPool.address)))
+            //   .to.be.closeTo(Math.round(startingPositionAmounts.token1Amount * 1.02), 1);
+
+            //TODO: this should be 0 once the test does true balanced trading
+            expect(toInt(await token0.balanceOf(metaPool.address))).to.be.closeTo(0, 1);
+            // expect(toInt(await token1.balanceOf(metaPool.address))).to.be.closeTo(0, 1);
+
+            const endTightPositionAmounts = await metaPool.tightPosition();
+            const endWidePositionAmounts = await metaPool.widePosition();
+
+            // expect(await token1.balanceOf(uniswapPool.address)).to.equal('10200');
+            // TODO: find mathamatical source of these liquidity values
+            expect(endTightPositionAmounts.liquidity).to.equal(322682);
+            expect(endWidePositionAmounts.liquidity).to.equal(39691);
+
+            // expect(await token0.balanceOf(uniswapPool.address)).to.equal('10299');
+            // expect(await token1.balanceOf(uniswapPool.address)).to.equal('10100');
+            // const [liquidityTight] = await uniswapPool.positions(positionIdTight);
+            // // expect(liquidityTight).to.equal('10099');
+            // const [liquidityWide] = await uniswapPool.positions(positionIdTight);
+            // // expect(liquidityWide).to.equal('10099');
           });
         });
       });

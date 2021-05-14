@@ -12,6 +12,7 @@ import { IERC20Minimal } from './uniswap-v3/interfaces/IERC20Minimal.sol';
 
 import { TransferHelper } from "./libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./libraries/LiquidityAmounts.sol";
+import { UniMathHelpers } from "./libraries/UniMathHelpers.sol";
 import { ERC20 } from "./ERC20.sol";
 import "hardhat/console.sol";
 
@@ -223,8 +224,29 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   }
 
   function rebalance() external {
-    claim(tightLowerTick, tightUpperTick);
-    claim(wideLowerTick, wideUpperTick);
+    // Calling burn with 0 liquidity will update fee balances
+    pool.burn(tightLowerTick, tightUpperTick, 0);
+    pool.burn(wideLowerTick, wideUpperTick, 0);
+
+    // Collect fees from tight range
+    pool.collect(
+      address(this),
+      tightLowerTick,
+      tightUpperTick,
+      // We can request MAX_INT, and Uniswap will just give whatever we're owed
+      type(uint128).max,
+      type(uint128).max
+    );
+
+    // Collect fees from wide range
+    pool.collect(
+      address(this),
+      wideLowerTick,
+      wideUpperTick,
+      // We can request MAX_INT, and Uniswap will just give whatever we're owed
+      type(uint128).max,
+      type(uint128).max
+    );
 
     deposit();
   }
@@ -287,16 +309,27 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       amount1 -= (tightToken1 + wideToken1);
     }
 
-    // If we still have some leftover, we need to swap so it's balanced
-    // This part is still a PoC, would need much more intelligent swapping
-    if (amount0 > 0 || amount1 > 0) {
+    // If we still have some left-over, we need to swap so it's balanced
+    // We check if it's bigger than 2, since there's no use in swapping dust
+    if (amount0 > 2 || amount1 > 2) {
       // NOTE: These calculations assume 1 wstETH ~= 1 ETH
-      bool zeroForOne = amount0 > amount1;
+      bool zeroForOne;
+      int256 swapAmount;
+      if (amount0 <= 2 || amount1 <= 2) {
+        zeroForOne = amount0 > amount1;
+        swapAmount = int256(zeroForOne ? amount0 : amount1) / 2;
+      } else {
+        uint256 equivelantAmount0 = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount1), token1, token0);
+        zeroForOne = amount0 > equivelantAmount0;
+        swapAmount = zeroForOne
+          ? int256(amount0 - equivelantAmount0)
+          : int256(amount1 - UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount0), token0, token1));
+      }
 
       (int256 amount0Delta, int256 amount1Delta) = pool.swap(
         address(this),
         zeroForOne,
-        int256(zeroForOne ? amount0 : amount1) / 2,
+        swapAmount,
         zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
         abi.encode(address(this))
       );
@@ -344,23 +377,6 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
         );
       }
     }
-  }
-
-  function claim(
-    int24 lowerTick,
-    int24 upperTick
-  ) private /*returns (uint256 collected0, uint256 collected1)*/ {
-    pool.burn(lowerTick, upperTick, 0); // Calling burn with 0 liquidity will update fee balances
-
-    // Collect all fees owed
-    /*(collected0, collected1) =*/ pool.collect(
-      address(this),
-      lowerTick,
-      upperTick,
-      // We can request MAX_INT, and Uniswap will just give whatever we're owed
-      type(uint128).max,
-      type(uint128).max
-    );
   }
 
   function requireMinimalPriceMovement() private view {
