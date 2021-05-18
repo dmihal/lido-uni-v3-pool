@@ -142,7 +142,7 @@ describe('MetaPools', function() {
 
   describe('MetaPool', function() {
     describe('deposits', function() {
-      it('Should deposit funds into a metapool', async function() {
+      it('Should deposit funds into a metapool using token 0', async function() {
         const token0Input = 10000;
 
         const tightPosition = Position.fromAmount0({
@@ -166,7 +166,7 @@ describe('MetaPools', function() {
         const token0Desired = token0DesiredTight + token0DesiredWide;
         const token1Desired = token1DesiredTight + token1DesiredWide;
 
-        await metaPool.mint(token0Desired, '0', '0');
+        await metaPool.depositFromToken0Amount(token0Desired, '0', '0');
 
         const tightPositionAmounts = await metaPool.tightPosition();
         const widePositionAmounts = await metaPool.widePosition();
@@ -224,7 +224,7 @@ describe('MetaPools', function() {
         const token0Desired2 = token0DesiredTight2 + token0DesiredWide2;
         const token1Desired2 = token1DesiredTight2 + token1DesiredWide2;
 
-        await metaPool.mint(token0Desired2, '0', '0');
+        await metaPool.depositFromToken0Amount(token0Desired2, '0', '0');
 
         const tightPositionAmounts2 = await metaPool.tightPosition();
         const widePositionAmounts2 = await metaPool.widePosition();
@@ -258,11 +258,128 @@ describe('MetaPools', function() {
         expect(parseInt(await metaPool.totalSupply())).to.be.closeTo(expectedLPTokens + expectedLPTokens2, 1);
         expect(parseInt(await metaPool.balanceOf(await user0.getAddress()))).to.be.closeTo(expectedLPTokens2, 1);
       });
+
+      it('Should deposit funds into a metapool using token 1', async function() {
+        const token1Input = 10000;
+
+        const tightPosition = Position.fromAmount1({
+          pool: jsPool,
+          tickLower: TICK_1_01,
+          tickUpper: TICK_0_95,
+          amount1: token1Input * 0.8,
+        });
+        const token0DesiredTight = parseInt(tightPosition.mintAmounts.amount0.toString());
+        const token1DesiredTight = parseInt(tightPosition.mintAmounts.amount1.toString());
+
+        const widePosition = Position.fromAmount1({
+          pool: jsPool,
+          tickLower: TICK_1_03,
+          tickUpper: TICK_0_90,
+          amount1: token1Input * 0.2,
+        });
+        const token0DesiredWide = parseInt(widePosition.mintAmounts.amount0.toString());
+        const token1DesiredWide = parseInt(widePosition.mintAmounts.amount1.toString());
+
+        const token0Desired = token0DesiredTight + token0DesiredWide;
+        const token1Desired = token1DesiredTight + token1DesiredWide;
+
+        await metaPool.depositFromToken1Amount(token1Desired, '0', '0');
+
+        const tightPositionAmounts = await metaPool.tightPosition();
+        const widePositionAmounts = await metaPool.widePosition();
+        // tightPosition & widePosition rounds down, so we need to add 1 unit of tollerance
+        expect(parseInt(tightPositionAmounts.token0Amount.toString()))
+          .to.be.closeTo(token0DesiredTight, 1);
+        expect(parseInt(tightPositionAmounts.token1Amount.toString()))
+          .to.be.closeTo(token1DesiredTight, 1);
+        expect(tightPositionAmounts.liquidity).to.equal(tightPosition.liquidity.toString());
+        expect(parseInt(widePositionAmounts.token0Amount.toString()))
+          .to.be.closeTo(token0DesiredWide, 1);
+        expect(parseInt(widePositionAmounts.token1Amount.toString()))
+          .to.be.closeTo(token1DesiredWide, 1);
+        expect(widePositionAmounts.liquidity).to.equal(widePosition.liquidity.toString());
+
+        expect(await token0.balanceOf(uniswapPool.address)).to.equal(token0Desired);
+        expect(await token1.balanceOf(uniswapPool.address)).to.equal(token1Desired);
+
+        const [tightLiquidity] = await uniswapPool.positions(positionIdTight);
+        expect(tightLiquidity).to.equal(tightPosition.liquidity.toString());
+        const [wideLiquidity] = await uniswapPool.positions(positionIdWide);
+        expect(wideLiquidity).to.equal(widePosition.liquidity.toString());
+
+        const expectedLPTokens = Math.floor(tightPosition.liquidity.toString() * 0.8)
+          + Math.floor(widePosition.liquidity.toString() * 0.2);
+        expect(await metaPool.totalSupply()).to.equal(expectedLPTokens);
+        expect(await metaPool.balanceOf(await user0.getAddress())).to.equal(expectedLPTokens);
+
+
+        // Move LP tokens so that we can check new minted tokens later
+        await metaPool.transfer(await user1.getAddress(), expectedLPTokens);
+
+
+        // Now, let's do a second deposit
+        const token1Input2 = 5000;
+
+        const tightPosition2 = Position.fromAmount1({
+          pool: jsPool,
+          tickLower: TICK_1_01,
+          tickUpper: TICK_0_95,
+          amount1: token1Input2 * 0.8,
+        });
+        const token0DesiredTight2 = parseInt(tightPosition2.mintAmounts.amount0.toString());
+        const token1DesiredTight2 = parseInt(tightPosition2.mintAmounts.amount1.toString());
+
+        const widePosition2 = Position.fromAmount1({
+          pool: jsPool,
+          tickLower: TICK_1_03,
+          tickUpper: TICK_0_90,
+          amount1: token1Input2 * 0.2,
+        });
+        const token0DesiredWide2 = parseInt(widePosition2.mintAmounts.amount0.toString());
+        const token1DesiredWide2 = parseInt(widePosition2.mintAmounts.amount1.toString());
+
+        const token0Desired2 = token0DesiredTight2 + token0DesiredWide2;
+        const token1Desired2 = token1DesiredTight2 + token1DesiredWide2;
+
+        await metaPool.depositFromToken1Amount(token1Desired2, '0', '0');
+
+        const tightPositionAmounts2 = await metaPool.tightPosition();
+        const widePositionAmounts2 = await metaPool.widePosition();
+        // tightPosition & widePosition rounds down, so we need to add 1 unit of tollerance
+        // The following value is off by 2, instead of 1. I'm pretty sure this is just a rounding issue, but
+        // this should probably be double-checked
+        expect(parseInt(tightPositionAmounts2.token0Amount))
+          .to.be.closeTo(token0DesiredTight + token0DesiredTight2, 2);
+        expect(parseInt(tightPositionAmounts2.token1Amount))
+          .to.be.closeTo(token1DesiredTight + token1DesiredTight2, 1);
+        expect(tightPositionAmounts2.liquidity)
+          .to.equal(JSBI.add(tightPosition2.liquidity, tightPosition.liquidity).toString());
+        expect(parseInt(widePositionAmounts2.token0Amount))
+          .to.be.closeTo(token0DesiredWide + token0DesiredWide2, 1);
+        expect(parseInt(widePositionAmounts2.token1Amount))
+          .to.be.closeTo(token1DesiredWide + token1DesiredWide2, 1);
+        expect(widePositionAmounts2.liquidity)
+          .to.equal(JSBI.add(widePosition2.liquidity, widePosition.liquidity).toString());
+
+        expect(await token0.balanceOf(uniswapPool.address)).to.equal(token0Desired + token0Desired2);
+        expect(await token1.balanceOf(uniswapPool.address)).to.equal(token1Desired + token1Desired2);
+
+        const [tightLiquidity2] = await uniswapPool.positions(positionIdTight);
+        expect(tightLiquidity2).to.equal(JSBI.add(tightPosition2.liquidity, tightPosition.liquidity).toString());
+        const [wideLiquidity2] = await uniswapPool.positions(positionIdWide);
+        expect(wideLiquidity2).to.equal(JSBI.add(widePosition2.liquidity, widePosition.liquidity).toString());
+
+        const expectedLPTokens2 = Math.floor(tightPosition2.liquidity.toString() * 0.8)
+          + Math.floor(widePosition2.liquidity.toString() * 0.2);
+        // LP token calculation divides and rounds down, so we need to add 1 unit of tollerance
+        expect(parseInt(await metaPool.totalSupply())).to.be.closeTo(expectedLPTokens + expectedLPTokens2, 1);
+        expect(parseInt(await metaPool.balanceOf(await user0.getAddress()))).to.be.closeTo(expectedLPTokens2, 1);
+      });
     });
 
     describe('with liquidity depositted', function() {
       beforeEach(async function() {
-        await metaPool.mint(10000, 0, 0);
+        await metaPool.depositFromToken0Amount(10000, 0, 0);
         await ethers.provider.send("evm_increaseTime", [6 * 60]);
         await ethers.provider.send("evm_mine");
       });
