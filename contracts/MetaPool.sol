@@ -29,6 +29,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   int24 public immutable wideLowerTick;
   int24 public immutable wideUpperTick;
 
+  uint24 public immutable maxTickMovement;
+
   uint160 public immutable tightLowerSqrtRatioX96;
   uint160 public immutable tightUpperSqrtRatioX96;
   uint160 public immutable wideLowerSqrtRatioX96;
@@ -42,7 +44,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     int24 _tightLowerTick,
     int24 _tightUpperTick,
     int24 _wideLowerTick,
-    int24 _wideUpperTick
+    int24 _wideUpperTick,
+    uint24 _maxTickMovement
   ) {
     pool = _pool;
     token0 = _pool.token0();
@@ -58,6 +61,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     tightUpperSqrtRatioX96 = TickMath.getSqrtRatioAtTick(_tightUpperTick);
     wideLowerSqrtRatioX96 = TickMath.getSqrtRatioAtTick(_wideLowerTick);
     wideUpperSqrtRatioX96 = TickMath.getSqrtRatioAtTick(_wideUpperTick);
+
+    maxTickMovement = _maxTickMovement;
 
     tightPositionID = keccak256(abi.encodePacked(address(this), _tightLowerTick, _tightUpperTick));
     widePositionID = keccak256(abi.encodePacked(address(this), _wideLowerTick, _wideUpperTick));
@@ -391,7 +396,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     int24 averageTick = int24(int256(tickCumulatives[1] - tickCumulatives[0]) / 5 minutes);
 
     int24 diff = averageTick > currentTick ? averageTick - currentTick : currentTick - averageTick;
-    require(diff < 100, "Slippage");
+    require(uint24(diff) < maxTickMovement, "Slippage");
   }
 
   function uniswapV3MintCallback(

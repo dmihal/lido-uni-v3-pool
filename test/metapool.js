@@ -42,6 +42,7 @@ const TICK_1_03 = -300;
 const TICK_0_90 = 1050;
 
 const FEE_AMOUNT = 500;
+const maxTickMovement = 100;
 
 const MAX_INT = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
@@ -114,7 +115,7 @@ describe('MetaPools', function() {
     await uniswapPool.increaseObservationCardinalityNext(30);
 
     const MetaPool = await ethers.getContractFactory('MetaPool');
-    metaPool = await MetaPool.deploy(uniswapPool.address, TICK_1_01, TICK_0_95, TICK_1_03, TICK_0_90);
+    metaPool = await MetaPool.deploy(uniswapPool.address, TICK_1_01, TICK_0_95, TICK_1_03, TICK_0_90, maxTickMovement);
 
     positionIdTight = position(metaPool.address, TICK_1_01, TICK_0_95);
     positionIdWide = position(metaPool.address, TICK_1_03, TICK_0_90);
@@ -262,6 +263,8 @@ describe('MetaPools', function() {
     describe('with liquidity depositted', function() {
       beforeEach(async function() {
         await metaPool.mint(10000, 0, 0);
+        await ethers.provider.send("evm_increaseTime", [6 * 60]);
+        await ethers.provider.send("evm_mine");
       });
 
       describe('withdrawal', function() {
@@ -305,6 +308,16 @@ describe('MetaPools', function() {
           expect(toInt(await token1.balanceOf(EMPTY_ADDRESS)))
             .to.be.closeTo(Math.round(startingToken1 * 0.6), 2);
         });
+      });
+
+      describe('after a significant price movement', function() {
+        beforeEach(async function() {
+          await swapTest.swap(uniswapPool.address, false, 5000);
+        });
+
+        it('should fail to rebalance', async function() {
+          await expect(metaPool.rebalance()).to.be.revertedWith('Slippage');
+        })
       });
 
       describe('after lots of balanced trading', function() {
