@@ -124,19 +124,19 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 wideAmount0Desired = amount0Desired - tightAmount0Desired; // 20%, can't overflow
 
     (uint160 sqrtRatioX96, int24 tick, , , , , ) = pool.slot0();
-    require(tick >= tightLowerTick, "Outside range");
+    require(tick <= tightUpperTick, "Outside range");
 
     (uint128 initialTightLiquidity, , , , ) = pool.positions(tightPositionID);
     (uint128 initialWideLiquidity, , , , ) = pool.positions(widePositionID);
 
     uint128 newTightLiquidity = LiquidityAmounts.getLiquidityForAmount0(
-      sqrtRatioX96,
+      sqrtRatioX96 < tightLowerSqrtRatioX96 ? tightLowerSqrtRatioX96 : sqrtRatioX96,
       tightUpperSqrtRatioX96,
       tightAmount0Desired
     );
 
     uint128 newWideLiquidity = LiquidityAmounts.getLiquidityForAmount0(
-      sqrtRatioX96,
+      sqrtRatioX96 < wideLowerSqrtRatioX96 ? wideLowerSqrtRatioX96 : sqrtRatioX96,
       wideUpperSqrtRatioX96,
       wideAmount0Desired
     );
@@ -181,19 +181,19 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 wideAmount1Desired = amount1Desired - tightAmount1Desired; // 20%, can't overflow
 
     (uint160 sqrtRatioX96, int24 tick, , , , , ) = pool.slot0();
-    require(tick <= tightUpperTick, "Outside range");
+    require(tick >= tightLowerTick, "Outside range");
     (uint128 initialTightLiquidity, , , , ) = pool.positions(tightPositionID);
     (uint128 initialWideLiquidity, , , , ) = pool.positions(widePositionID);
 
     uint128 newTightLiquidity = LiquidityAmounts.getLiquidityForAmount1(
       tightLowerSqrtRatioX96,
-      sqrtRatioX96,
+      sqrtRatioX96 > tightUpperSqrtRatioX96 ? tightUpperSqrtRatioX96 : sqrtRatioX96,
       tightAmount1Desired
     );
 
     uint128 newWideLiquidity = LiquidityAmounts.getLiquidityForAmount1(
       wideLowerSqrtRatioX96,
-      sqrtRatioX96,
+      sqrtRatioX96 > wideUpperSqrtRatioX96 ? wideUpperSqrtRatioX96 : sqrtRatioX96,
       wideAmount1Desired
     );
 
