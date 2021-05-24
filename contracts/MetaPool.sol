@@ -14,7 +14,6 @@ import { TransferHelper } from "./libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./libraries/LiquidityAmounts.sol";
 import { UniMathHelpers } from "./libraries/UniMathHelpers.sol";
 import { ERC20 } from "./ERC20.sol";
-import "hardhat/console.sol";
 
 contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   using LowGasSafeMath for uint256;
@@ -111,65 +110,97 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     return (tightToken0 + wideToken0, tightToken1 + wideToken1);
   }
 
+  function previewMint(uint256 newLPTokens) external view returns (
+    uint256 token0Amount,
+    uint256 token1Amount
+  ) {
+    (uint128 initialTightLiquidity, , , , ) = pool.positions(tightPositionID);
+    (uint128 initialWideLiquidity, , , , ) = pool.positions(widePositionID);
+    require(initialTightLiquidity > 0 && initialWideLiquidity > 0, "INI");
+
+    (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+
+    uint256 _totalSupply = totalSupply; // Single SLOAD for gas saving
+    uint256 newTightLiquidity = newLPTokens.mul(initialTightLiquidity) / _totalSupply;
+    uint256 newWideLiquidity = newLPTokens.mul(initialWideLiquidity) / _totalSupply;
+
+    // Check so we can cast to 128
+    require(newTightLiquidity < type(uint128).max);
+    require(newWideLiquidity < type(uint128).max);
+
+    (uint256 tightToken0, uint256 tightToken1) = LiquidityAmounts.getAmountsForLiquidity(
+      sqrtRatioX96, tightLowerSqrtRatioX96, tightUpperSqrtRatioX96, uint128(newTightLiquidity));
+
+    (uint256 wideToken0, uint256 wideToken1) = LiquidityAmounts.getAmountsForLiquidity(
+      sqrtRatioX96, wideLowerSqrtRatioX96, wideUpperSqrtRatioX96, uint128(newWideLiquidity));
+
+    return (tightToken0 + wideToken0, tightToken1 + wideToken1);
+  }
+
   ///
   //  Mutative functions
   ///
+  function initialize() external {
+    (uint128 tightLiquidity, , , , ) = pool.positions(tightPositionID);
+    (uint128 wideLiquidity, , , , ) = pool.positions(widePositionID);
 
-  function depositFromToken0Amount(
-    uint256 amount0Desired,
-    uint256 amount0Min,
-    uint256 amount1Min
-  ) external returns (uint256 mintAmount) {
-    uint256 tightAmount0Desired = amount0Desired.mul(8000) / 10000; // 80%
-    uint256 wideAmount0Desired = amount0Desired - tightAmount0Desired; // 20%, can't overflow
+    require(tightLiquidity == 0 && wideLiquidity == 0);
 
-    (uint160 sqrtRatioX96, int24 tick, , , , , ) = pool.slot0();
-    require(tick <= tightUpperTick, "Outside range");
+    (uint256 wideToken0, uint256 wideToken1) = pool.mint(
+      address(this),
+      wideLowerTick,
+      wideUpperTick,
+      100,
+      abi.encode(msg.sender) // Data field for uniswapV3MintCallback
+    );
 
+    (uint256 tightToken0, uint256 tightToken1) = pool.mint(
+      address(this),
+      tightLowerTick,
+      tightUpperTick,
+      800,
+      abi.encode(msg.sender) // Data field for uniswapV3MintCallback
+    );
+
+    _mint(address(0), 100);
+  }
+
+  function mint(
+    uint256 newLPTokens,
+    uint256 amount0Max,
+    uint256 amount1Max
+  ) external {
     (uint128 initialTightLiquidity, , , , ) = pool.positions(tightPositionID);
     (uint128 initialWideLiquidity, , , , ) = pool.positions(widePositionID);
-
-    uint128 newTightLiquidity = LiquidityAmounts.getLiquidityForAmount0(
-      sqrtRatioX96 < tightLowerSqrtRatioX96 ? tightLowerSqrtRatioX96 : sqrtRatioX96,
-      tightUpperSqrtRatioX96,
-      tightAmount0Desired
-    );
-
-    uint128 newWideLiquidity = LiquidityAmounts.getLiquidityForAmount0(
-      sqrtRatioX96 < wideLowerSqrtRatioX96 ? wideLowerSqrtRatioX96 : sqrtRatioX96,
-      wideUpperSqrtRatioX96,
-      wideAmount0Desired
-    );
-
-    { // Prevent stack too deep
-      (uint256 tightToken0, uint256 tightToken1) = pool.mint(
-        address(this),
-        tightLowerTick,
-        tightUpperTick,
-        newTightLiquidity,
-        abi.encode(msg.sender) // Data field for uniswapV3MintCallback
-      );
-
-      (uint256 wideToken0, uint256 wideToken1) = pool.mint(
-        address(this),
-        wideLowerTick,
-        wideUpperTick,
-        newWideLiquidity,
-        abi.encode(msg.sender) // Data field for uniswapV3MintCallback
-      );
-
-      require(tightToken0 + wideToken0 >= amount0Min && tightToken1 + wideToken1 >= amount1Min, "Slippage");
-    }
+    require(initialTightLiquidity > 0 && initialWideLiquidity > 0, "INI");
 
     uint256 _totalSupply = totalSupply; // Single SLOAD for gas saving
-    if (_totalSupply == 0) {
-      mintAmount = uint256(newTightLiquidity).mul(8000).add(uint256(newWideLiquidity).mul(2000)) / 10000;
-    } else {
-      uint256 tightRatio = uint256(newTightLiquidity).mul(_totalSupply) / initialTightLiquidity;
-      uint256 wideRatio = uint256(newWideLiquidity).mul(_totalSupply) / initialWideLiquidity;
-      mintAmount = tightRatio.mul(8000).add(wideRatio.mul(2000)) / 10000; // Mean of the two liquidity ratios
-    }
-    _mint(msg.sender, mintAmount);
+    uint256 newTightLiquidity = newLPTokens.mul(initialTightLiquidity) / _totalSupply;
+    uint256 newWideLiquidity = newLPTokens.mul(initialWideLiquidity) / _totalSupply;
+
+    // Check so we can cast to 128
+    require(newTightLiquidity < type(uint128).max);
+    require(newWideLiquidity < type(uint128).max);
+
+    (uint256 tightToken0, uint256 tightToken1) = pool.mint(
+      address(this),
+      tightLowerTick,
+      tightUpperTick,
+      uint128(newTightLiquidity),
+      abi.encode(msg.sender) // Data field for uniswapV3MintCallback
+    );
+
+    (uint256 wideToken0, uint256 wideToken1) = pool.mint(
+      address(this),
+      wideLowerTick,
+      wideUpperTick,
+      uint128(newWideLiquidity),
+      abi.encode(msg.sender) // Data field for uniswapV3MintCallback
+    );
+
+    require(tightToken0 + wideToken0 <= amount0Max && tightToken1 + wideToken1 <= amount1Max, "Slippage");
+
+    _mint(msg.sender, newLPTokens);
   }
 
   function depositFromToken1Amount(
@@ -321,13 +352,15 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     requireMinimalPriceMovement();
     // (uint160 sqrtRatioX96,,,,,,) = pool.slot0();
     // TODO: check against TWAP
-
+console.log('Passed');
     (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
     // Query the actual balances, so we can soop up any un-deposited
     // tokens from the last rebalance
     uint256 amount0 = IERC20Minimal(token0).balanceOf(address(this));
     uint256 amount1 = IERC20Minimal(token1).balanceOf(address(this));
+
+    console.log(amount0, amount1);
 
     {
       uint256 tightAmount0Desired = amount0.mul(8000) / 10000; // 80%
@@ -371,6 +404,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       amount1 -= (tightToken1 + wideToken1);
     }
 
+    console.log(amount0, amount1);
+
     // If we still have some left-over, we need to swap so it's balanced
     // We check if it's bigger than 2, since there's no use in swapping dust
     if (amount0 > 2 || amount1 > 2) {
@@ -398,6 +433,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
       amount0 = uint256(int256(amount0) - amount0Delta);
       amount1 = uint256(int256(amount1) - amount1Delta);
+    console.log(amount0, amount1);
 
       // Add liquidity a second time
       {
@@ -439,6 +475,10 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
         );
       }
     }
+    amount0 = IERC20Minimal(token0).balanceOf(address(this));
+    amount1 = IERC20Minimal(token1).balanceOf(address(this));
+
+    console.log(amount0, amount1);
   }
 
   function requireMinimalPriceMovement() private view {
