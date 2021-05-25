@@ -203,62 +203,6 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     _mint(msg.sender, newLPTokens);
   }
 
-  function depositFromToken1Amount(
-    uint256 amount1Desired,
-    uint256 amount0Min,
-    uint256 amount1Min
-  ) external returns (uint256 mintAmount) {
-    uint256 tightAmount1Desired = amount1Desired.mul(8000) / 10000; // 80%
-    uint256 wideAmount1Desired = amount1Desired - tightAmount1Desired; // 20%, can't overflow
-
-    (uint160 sqrtRatioX96, int24 tick, , , , , ) = pool.slot0();
-    require(tick >= tightLowerTick, "Outside range");
-    (uint128 initialTightLiquidity, , , , ) = pool.positions(tightPositionID);
-    (uint128 initialWideLiquidity, , , , ) = pool.positions(widePositionID);
-
-    uint128 newTightLiquidity = LiquidityAmounts.getLiquidityForAmount1(
-      tightLowerSqrtRatioX96,
-      sqrtRatioX96 > tightUpperSqrtRatioX96 ? tightUpperSqrtRatioX96 : sqrtRatioX96,
-      tightAmount1Desired
-    );
-
-    uint128 newWideLiquidity = LiquidityAmounts.getLiquidityForAmount1(
-      wideLowerSqrtRatioX96,
-      sqrtRatioX96 > wideUpperSqrtRatioX96 ? wideUpperSqrtRatioX96 : sqrtRatioX96,
-      wideAmount1Desired
-    );
-
-    { // Prevent stack too deep
-      (uint256 tightToken0, uint256 tightToken1) = pool.mint(
-        address(this),
-        tightLowerTick,
-        tightUpperTick,
-        newTightLiquidity,
-        abi.encode(msg.sender) // Data field for uniswapV3MintCallback
-      );
-
-      (uint256 wideToken0, uint256 wideToken1) = pool.mint(
-        address(this),
-        wideLowerTick,
-        wideUpperTick,
-        newWideLiquidity,
-        abi.encode(msg.sender) // Data field for uniswapV3MintCallback
-      );
-
-      require(tightToken0 + wideToken0 >= amount0Min && tightToken1 + wideToken1 >= amount1Min, "Slippage");
-    }
-
-    uint256 _totalSupply = totalSupply; // Single SLOAD for gas saving
-    if (_totalSupply == 0) {
-      mintAmount = uint256(newTightLiquidity).mul(8000).add(uint256(newWideLiquidity).mul(2000)) / 10000;
-    } else {
-      uint256 tightRatio = uint256(newTightLiquidity).mul(_totalSupply) / initialTightLiquidity;
-      uint256 wideRatio = uint256(newWideLiquidity).mul(_totalSupply) / initialWideLiquidity;
-      mintAmount = tightRatio.mul(8000).add(wideRatio.mul(2000)) / 10000; // Mean of the two liquidity ratios
-    }
-    _mint(msg.sender, mintAmount);
-  }
-
   function burn(
     uint256 burnAmount,
     uint256 amount0Min,
