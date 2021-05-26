@@ -298,9 +298,6 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
   function deposit() private {
     requireMinimalPriceMovement();
-    // (uint160 sqrtRatioX96,,,,,,) = pool.slot0();
-    // TODO: check against TWAP
-console.log('Passed');
     (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
     // Query the actual balances, so we can soop up any un-deposited
@@ -361,14 +358,17 @@ console.log('Passed');
       bool zeroForOne;
       int256 swapAmount;
       if (amount0 <= 2 || amount1 <= 2) {
+        // If we only have a balance of one token, we'll swap half of it into the other token
         zeroForOne = amount0 > amount1;
         swapAmount = int256(zeroForOne ? amount0 : amount1) / 2;
       } else {
+        // If we have a balance of each token, we'll swap the difference between the two
         uint256 equivelantAmount0 = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount1), token1, token0);
         zeroForOne = amount0 > equivelantAmount0;
         swapAmount = zeroForOne
           ? int256(amount0 - equivelantAmount0)
           : int256(amount1 - UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount0), token0, token1));
+        swapAmount /= 2;
       }
 
       (int256 amount0Delta, int256 amount1Delta) = pool.swap(
