@@ -60,7 +60,7 @@ async function logRebalance(call) {
   const { interface } = await ethers.getContractFactory('UniswapV3Pool');
 
   for (const event of events) {
-    switch (event.topics[0]) {
+    switch (event.event || event.topics[0]) {
       case interface.getEventTopic('Collect'):
         const collectLog = interface.decodeEventLog('Collect', event.data, event.topics);
         console.log(`Collect [${collectLog.tickLower}:${collectLog.tickUpper}] Collected ${collectLog.amount0} token0 & ${collectLog.amount1} token1`);
@@ -78,6 +78,13 @@ async function logRebalance(call) {
         } else {
           console.log(`Swap ${swapLog.amount1 * -1} token1 for ${swapLog.amount0} token0`);
         }
+        break;
+      case 'Rebalanced':
+        const ratio = event.args.newTightLiquidity.toString() / event.args.newWideLiquidity.toString();
+        console.log(`Rebalanced: added ${event.args.newTightLiquidity.toString()} tight & `
+          + `${event.args.newWideLiquidity.toString()} wide`
+          + ` -- ${event.args.amount0Remainder.toString()} token0 & `
+          + `${event.args.amount1Remainder.toString()} token1 remaning (${ratio} ratio)`);
         break;
     }
   }

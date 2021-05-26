@@ -40,6 +40,13 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   bytes32 public immutable tightPositionID;
   bytes32 public immutable widePositionID;
 
+  event Rebalanced(
+    uint128 newTightLiquidity,
+    uint128 newWideLiquidity,
+    uint256 amount0Remainder,
+    uint256 amount1Remainder
+  );
+
   constructor(
     IUniswapV3Pool _pool,
     int24 _tightLowerTick,
@@ -305,7 +312,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 amount0 = IERC20Minimal(token0).balanceOf(address(this));
     uint256 amount1 = IERC20Minimal(token1).balanceOf(address(this));
 
-    console.log(amount0, amount1);
+    uint128 tightLiquidityAdded;
+    uint128 wideLiquidityAdded;
 
     {
       uint256 tightAmount0Desired = amount0.mul(8000) / 10000; // 80%
@@ -347,41 +355,49 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
       amount0 -= (tightToken0 + wideToken0);
       amount1 -= (tightToken1 + wideToken1);
-    }
 
-    console.log(amount0, amount1);
+      tightLiquidityAdded += newTightLiquidity;
+      wideLiquidityAdded += newWideLiquidity;
+    }
 
     // If we still have some left-over, we need to swap so it's balanced
     // We check if it's bigger than 2, since there's no use in swapping dust
     if (amount0 > 2 || amount1 > 2) {
-      // NOTE: These calculations assume 1 wstETH ~= 1 ETH
-      bool zeroForOne;
-      int256 swapAmount;
-      if (amount0 <= 2 || amount1 <= 2) {
-        // If we only have a balance of one token, we'll swap half of it into the other token
-        zeroForOne = amount0 > amount1;
-        swapAmount = int256(zeroForOne ? amount0 : amount1) / 2;
-      } else {
-        // If we have a balance of each token, we'll swap the difference between the two
-        uint256 equivelantAmount0 = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount1), token1, token0);
-        zeroForOne = amount0 > equivelantAmount0;
-        swapAmount = zeroForOne
-          ? int256(amount0 - equivelantAmount0)
-          : int256(amount1 - UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount0), token0, token1));
-        swapAmount /= 2;
+      {
+        bool zeroForOne;
+        int256 swapAmount;
+        if (amount0 <= 2 || amount1 <= 2) {
+          // If we only have a balance of one token, we'll swap half of it into the other token
+          zeroForOne = amount0 > amount1;
+          swapAmount = int256(zeroForOne ? amount0 : amount1);
+        } else {
+          // If we have a balance of each token, we'll swap the difference between the two
+          uint256 equivelantAmount0 = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount1), token1, token0);
+          zeroForOne = amount0 > equivelantAmount0;
+          swapAmount = zeroForOne
+            ? int256(amount0 - equivelantAmount0)
+            : int256(amount1 - UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount0), token0, token1));
+        }
+
+        (address fromAddr, address toAddr) = zeroForOne ? (token0, token1) : (token1, token0);
+        // Approximate the price ratio by getting a quote for 1e10
+        // This approximation lets us avoid doing decimal exponent math
+        uint256 price = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, 1e10, fromAddr, toAddr);
+        // Multiply the starting swap amount by the price ratio
+        // If the pool is balanced, this will end up being equivelant to `swapAmount / 2`
+        swapAmount = swapAmount * 1e10 / int256(1e10 + price);
+
+        (int256 amount0Delta, int256 amount1Delta) = pool.swap(
+          address(this),
+          zeroForOne,
+          swapAmount,
+          zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
+          abi.encode(address(this))
+        );
+
+        amount0 = uint256(int256(amount0) - amount0Delta);
+        amount1 = uint256(int256(amount1) - amount1Delta);
       }
-
-      (int256 amount0Delta, int256 amount1Delta) = pool.swap(
-        address(this),
-        zeroForOne,
-        swapAmount,
-        zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
-        abi.encode(address(this))
-      );
-
-      amount0 = uint256(int256(amount0) - amount0Delta);
-      amount1 = uint256(int256(amount1) - amount1Delta);
-    console.log(amount0, amount1);
 
       // Add liquidity a second time
       {
@@ -407,30 +423,34 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
         );
 
         if (newTightLiquidity > 0) {
-          pool.mint(
+          (uint256 tightToken0, uint256 tightToken1) = pool.mint(
             address(this),
             tightLowerTick,
             tightUpperTick,
             newTightLiquidity,
             abi.encode(address(this)) // Data field for uniswapV3MintCallback
           );
+          amount0 -= tightToken0;
+          amount1 -= tightToken1;
+          tightLiquidityAdded += newTightLiquidity;
         }
 
         if (newWideLiquidity > 0) {
-          pool.mint(
+          (uint256 wideToken0, uint256 wideToken1) = pool.mint(
             address(this),
             wideLowerTick,
             wideUpperTick,
             newWideLiquidity,
             abi.encode(address(this)) // Data field for uniswapV3MintCallback
           );
+          amount0 -= wideToken0;
+          amount1 -= wideToken1;
+          wideLiquidityAdded += newWideLiquidity;
         }
       }
     }
-    amount0 = IERC20Minimal(token0).balanceOf(address(this));
-    amount1 = IERC20Minimal(token1).balanceOf(address(this));
 
-    console.log(amount0, amount1);
+    emit Rebalanced(tightLiquidityAdded, wideLiquidityAdded, amount0, amount1);
   }
 
   function requireMinimalPriceMovement() private view {
