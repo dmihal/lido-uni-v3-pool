@@ -10,8 +10,8 @@ interface ERC677Receiver {
 contract ERC20 {
     using LowGasSafeMath for uint;
 
-    string public constant name = 'MetaPool';
-    string public constant symbol = 'MPL';
+    string public constant name = 'Lido stETH UniV3 Pool';
+    string public constant symbol = 'LDOPL';
     uint8 public constant decimals = 18;
     uint  public totalSupply;
 
