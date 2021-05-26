@@ -406,21 +406,25 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
           wideAmount1Desired
         );
 
-        pool.mint(
-          address(this),
-          tightLowerTick,
-          tightUpperTick,
-          newTightLiquidity,
-          abi.encode(address(this)) // Data field for uniswapV3MintCallback
-        );
+        if (newTightLiquidity > 0) {
+          pool.mint(
+            address(this),
+            tightLowerTick,
+            tightUpperTick,
+            newTightLiquidity,
+            abi.encode(address(this)) // Data field for uniswapV3MintCallback
+          );
+        }
 
-        pool.mint(
-          address(this),
-          wideLowerTick,
-          wideUpperTick,
-          newWideLiquidity,
-          abi.encode(address(this)) // Data field for uniswapV3MintCallback
-        );
+        if (newWideLiquidity > 0) {
+          pool.mint(
+            address(this),
+            wideLowerTick,
+            wideUpperTick,
+            newWideLiquidity,
+            abi.encode(address(this)) // Data field for uniswapV3MintCallback
+          );
+        }
       }
     }
     amount0 = IERC20Minimal(token0).balanceOf(address(this));

@@ -411,7 +411,7 @@ describe('MetaPools', function() {
 
     describe('with liquidity depositted', function() {
       beforeEach(async function() {
-        await metaPool.mint(10000, 1000000, 1000000);
+        await metaPool.mint(100000, 1000000, 1000000);
         await ethers.provider.send("evm_increaseTime", [6 * 60]);
         await ethers.provider.send("evm_mine");
       });
