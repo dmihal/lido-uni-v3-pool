@@ -30,6 +30,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
   uint24 public immutable maxTickMovement;
 
+  uint128 public immutable liquidityRatio;
+
   uint160 public immutable tightLowerSqrtRatioX96;
   uint160 public immutable tightUpperSqrtRatioX96;
   uint160 public immutable wideLowerSqrtRatioX96;
@@ -44,7 +46,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     int24 _tightUpperTick,
     int24 _wideLowerTick,
     int24 _wideUpperTick,
-    uint24 _maxTickMovement
+    uint24 _maxTickMovement,
+    uint128 _liquidityRatio
   ) {
     pool = _pool;
     token0 = _pool.token0();
@@ -62,6 +65,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     wideUpperSqrtRatioX96 = TickMath.getSqrtRatioAtTick(_wideUpperTick);
 
     maxTickMovement = _maxTickMovement;
+    liquidityRatio = _liquidityRatio;
 
     tightPositionID = keccak256(abi.encodePacked(address(this), _tightLowerTick, _tightUpperTick));
     widePositionID = keccak256(abi.encodePacked(address(this), _wideLowerTick, _wideUpperTick));
@@ -158,7 +162,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       address(this),
       tightLowerTick,
       tightUpperTick,
-      800,
+      100 * liquidityRatio,
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 

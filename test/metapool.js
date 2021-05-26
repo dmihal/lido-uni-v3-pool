@@ -46,6 +46,9 @@ const FEE_AMOUNT = 500;
 const maxTickMovement = 100;
 const INITIAL_LIQ = 20;
 
+// A liquidity ratio of 8 will allocate roughly 80% to tight and 20% to wide at a balanced price ratio
+const LIQUIDITY_RATIO = 8;
+
 const MAX_INT = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
 const toInt = val => parseInt(val.toString());
@@ -127,7 +130,15 @@ describe('MetaPools', function() {
     await uniswapPool.increaseObservationCardinalityNext(30);
 
     const MetaPool = await ethers.getContractFactory('MetaPool');
-    metaPool = await MetaPool.deploy(uniswapPool.address, TICK_1_01, TICK_0_95, TICK_1_03, TICK_0_90, maxTickMovement);
+    metaPool = await MetaPool.deploy(
+      uniswapPool.address,
+      TICK_1_01,
+      TICK_0_95,
+      TICK_1_03,
+      TICK_0_90,
+      maxTickMovement,
+      LIQUIDITY_RATIO
+    );
 
     positionIdTight = position(metaPool.address, TICK_1_01, TICK_0_95);
     positionIdWide = position(metaPool.address, TICK_1_03, TICK_0_90);
