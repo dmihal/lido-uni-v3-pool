@@ -3,6 +3,10 @@ pragma solidity ^0.7.0;
 
 import './uniswap-v3/libraries/LowGasSafeMath.sol';
 
+interface ERC677Receiver {
+    function onTokenTransfer(address _sender, uint _value, bytes calldata _data) external;
+}
+
 contract ERC20 {
     using LowGasSafeMath for uint;
 
@@ -90,5 +94,23 @@ contract ERC20 {
         address recoveredAddress = ecrecover(digest, v, r, s);
         require(recoveredAddress != address(0) && recoveredAddress == owner, 'UniswapV2: INVALID_SIGNATURE');
         _approve(owner, spender, value);
+    }
+
+    function transferAndCall(address to, uint256 value, bytes calldata data) external returns (bool) {
+        // Other implementations of ERC677 don't force the recipient to be a contract, but
+        // we'll break from that standard to ensure the user doesn't send to the wrong address
+        require(isContract(to));
+
+        _transfer(msg.sender, to, value);
+
+        ERC677Receiver(to).onTokenTransfer(msg.sender, value, data);
+
+        return true;
+    }
+
+    function isContract(address _addr) internal view returns (bool) {
+        uint256 size;
+        assembly { size := extcodesize(_addr) }
+        return size > 0;
     }
 }
