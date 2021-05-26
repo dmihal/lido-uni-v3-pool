@@ -15,6 +15,8 @@ import { LiquidityAmounts } from "./libraries/LiquidityAmounts.sol";
 import { UniMathHelpers } from "./libraries/UniMathHelpers.sol";
 import { ERC20 } from "./ERC20.sol";
 
+/// @title MetaPool for allocating to the Lido stETH Uniswap V3 Pool
+/// @author David Mihal
 contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   using LowGasSafeMath for uint256;
 
@@ -47,6 +49,13 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 amount1Remainder
   );
 
+  /// @param _pool Address of the Uniswap V3 pool to use
+  /// @param _tightLowerTick Lower tick to use for the tight position
+  /// @param _tightUpperTick Upper tick to use for the tight position
+  /// @param _wideLowerTick Lower tick to use for the wide position
+  /// @param _wideUpperTick Upper tick to use for the wide position
+  /// @param _maxTickMovement Maximum number of ticks between the current tick & TWAP for rebalancing
+  /// @param _liquidityRatio Default ratio of wide liquidity to tight liquidity
   constructor(
     IUniswapV3Pool _pool,
     int24 _tightLowerTick,
@@ -82,6 +91,10 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   //  View functions
   ///
 
+  /// @notice Return the amount of tokens and liquidity held by the pool's tight position
+  /// @return token0Amount Amount of token0 in the tight position
+  /// @return token1Amount Amount of token1 in the tight position
+  /// @return liquidity Amount Uniswap liquidity in the tight position
   function tightPosition() external view returns (
     uint256 token0Amount,
     uint256 token1Amount,
@@ -94,6 +107,10 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       sqrtRatioX96, tightLowerSqrtRatioX96, tightUpperSqrtRatioX96, liquidity);
   }
 
+  /// @notice Return the amount of tokens and liquidity held by the pool's wide position
+  /// @return token0Amount Amount of token0 in the wide position
+  /// @return token1Amount Amount of token1 in the wide position
+  /// @return liquidity Amount Uniswap liquidity in the wide position
   function widePosition() external view returns (
     uint256 token0Amount,
     uint256 token1Amount,
@@ -107,6 +124,9 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       sqrtRatioX96, wideLowerSqrtRatioX96, wideUpperSqrtRatioX96, liquidity);
   }
 
+  /// @notice Return the total amount of tokens held by the pool's positions in Uniswap
+  /// @return token0Amount Total amount of token0 held in the pool's positions
+  /// @return token1Amount Total amount of token1 held in the pool's positions
   function totalPosition() external view returns (uint256 token0Amount, uint256 token1Amount) {
     (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
@@ -121,6 +141,10 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     return (tightToken0 + wideToken0, tightToken1 + wideToken1);
   }
 
+  /// @notice Return the amount of tokens needed to mint a given amount of LP tokens
+  /// @param newLPTOkens Number of MetaPool LP tokens to simulate minting
+  /// @return token0Amount Total amount of token0 that will be transfered to mint
+  /// @return token1Amount Total amount of token1 that will be transfered to mint
   function previewMint(uint256 newLPTokens) external view returns (
     uint256 token0Amount,
     uint256 token1Amount
@@ -151,10 +175,15 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   ///
   //  Mutative functions
   ///
+
+  /// @notice Initialize the pool, depositting a negligable amount of tokens
+  ///         and minting LP tokens to 0x0
+  /// @dev The caller must have approved the contract to transfer token0 and token1
   function initialize() external {
     (uint128 tightLiquidity, , , , ) = pool.positions(tightPositionID);
     (uint128 wideLiquidity, , , , ) = pool.positions(widePositionID);
 
+    // Ensure the pool hasn't been initialized yet
     require(tightLiquidity == 0 && wideLiquidity == 0);
 
     pool.mint(
@@ -176,6 +205,11 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     _mint(address(0), 100);
   }
 
+  /// @notice Deposits tokens into Uniswap positions and mints LP tokens
+  /// @dev The caller must have approved the contract to transfer token0 and token1
+  /// @param newLPTOkens Number of MetaPool LP tokens to mint
+  /// @return amount0Max Maximum amount of token0 to deposit, to prevent slippage
+  /// @return amount1Max Maximum amount of token1 to deposit, to prevent slippage
   function mint(
     uint256 newLPTokens,
     uint256 amount0Max,
@@ -183,9 +217,12 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   ) external {
     (uint128 initialTightLiquidity, , , , ) = pool.positions(tightPositionID);
     (uint128 initialWideLiquidity, , , , ) = pool.positions(widePositionID);
+    // Ensure the pool is already initalized
     require(initialTightLiquidity > 0 && initialWideLiquidity > 0, "INI");
 
     uint256 _totalSupply = totalSupply; // Single SLOAD for gas saving
+
+    // Will deposit in the same ratio of liquidity tokens as the pool already holds
     uint256 newTightLiquidity = newLPTokens.mul(initialTightLiquidity) / _totalSupply;
     uint256 newWideLiquidity = newLPTokens.mul(initialWideLiquidity) / _totalSupply;
 
@@ -214,19 +251,24 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     _mint(msg.sender, newLPTokens);
   }
 
+  /// @notice Burns LP tokens and returns underlying tokens to recipient
+  /// @param burnAmount Number of MetaPool LP tokens to burn
+  /// @param amount0Min Minimum number of token0 to receive, to prevent slippage
+  /// @param amount1Min Minimum number of token0 to receive, to prevent slippage
+  /// @param recipient Address to receive the underlying tokens (typically sender)
+  /// @return amount0 Number of token0 returned
+  /// @return amount1 Number of token1 returned
   function burn(
     uint256 burnAmount,
     uint256 amount0Min,
     uint256 amount1Min,
-    uint256 deadline,
     address recipient
   ) external returns (uint256 amount0, uint256 amount1) {
-    require(deadline >= block.timestamp);
-
     uint256 _totalSupply = totalSupply; // Single SLOAD for gas saving
 
     _burn(msg.sender, burnAmount);
 
+    // Withdraw from tight position
     {
       (uint128 tightLiqiudity,,,,) = pool.positions(tightPositionID);
 
@@ -245,6 +287,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       );
     }
 
+    // Withdraw from wide position
     {
       (uint128 wideLiquidity,,,,) = pool.positions(widePositionID);
 
@@ -271,6 +314,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     require(amount0 >= amount0Min && amount1 >= amount1Min, "Slippage");
   }
 
+  /// @notice Claim all accrued fees and attempt to re-deposit into Uniswap positions
   function rebalance() external {
     // Calling burn with 0 liquidity will update fee balances
     pool.burn(tightLowerTick, tightUpperTick, 0);
@@ -312,6 +356,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 amount0 = IERC20Minimal(token0).balanceOf(address(this));
     uint256 amount1 = IERC20Minimal(token1).balanceOf(address(this));
 
+    // Total liquidity values, only used for logging
     uint128 tightLiquidityAdded;
     uint128 wideLiquidityAdded;
 
@@ -453,8 +498,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     emit Rebalanced(tightLiquidityAdded, wideLiquidityAdded, amount0, amount1);
   }
 
+  /// @notice Ensure that the current price isn't too far from the TWAP price
   function requireMinimalPriceMovement() private view {
-    // Q: Should we simplify this and just ensure it's inside the tight range?
     (, int24 currentTick, , , , , ) = pool.slot0();
 
     uint32[] memory secondsAgos = new uint32[](2);
@@ -467,6 +512,10 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     int24 diff = averageTick > currentTick ? averageTick - currentTick : currentTick - averageTick;
     require(uint24(diff) < maxTickMovement, "Slippage");
   }
+
+  ///
+  //  Uniswap callbacks
+  ///
 
   function uniswapV3MintCallback(
     uint256 amount0Owed,
