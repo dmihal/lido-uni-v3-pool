@@ -13,7 +13,12 @@ contract ERC20 {
     string public constant name = 'Lido stETH UniV3 Pool';
     string public constant symbol = 'LDOPL';
     uint8 public constant decimals = 18;
-    uint  public totalSupply;
+
+    // Variables are packed into a single storage slots
+    bool public paused = false;
+    uint248 public totalSupply;
+
+    address pauser;
 
     mapping(address => uint) public balanceOf;
     mapping(address => mapping(address => uint)) public allowance;
@@ -25,7 +30,11 @@ contract ERC20 {
     event Approval(address indexed owner, address indexed spender, uint value);
     event Transfer(address indexed from, address indexed to, uint value);
 
+    event PauserTransferred(address previousPauser, address newPauser);
+
     constructor() {
+        pauser = msg.sender;
+
         uint chainId;
         assembly {
             chainId := chainid()
@@ -41,15 +50,26 @@ contract ERC20 {
         );
     }
 
+    modifier notPaused {
+        require(!paused);
+        _;
+    }
+
+    function transferPauser(address newPauser) external {
+        require(pauser == msg.sender);
+        emit PauserTransferred(pauser, newPauser);
+        pauser = newPauser;
+    }
+
     function _mint(address to, uint value) internal {
-        totalSupply = totalSupply.add(value);
+        totalSupply = uint248(uint(totalSupply).add(value));
         balanceOf[to] = balanceOf[to].add(value);
         emit Transfer(address(0), to, value);
     }
 
     function _burn(address from, uint value) internal {
         balanceOf[from] = balanceOf[from].sub(value);
-        totalSupply = totalSupply.sub(value);
+        totalSupply = uint248(uint(totalSupply).sub(value));
         emit Transfer(from, address(0), value);
     }
 

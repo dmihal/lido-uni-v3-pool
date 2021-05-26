@@ -435,7 +435,7 @@ describe('MetaPools', function() {
 
           const lpTokens = await metaPool.balanceOf(await user0.getAddress());
           const lpTokensToBurn = Math.floor(lpTokens * .6);
-          await metaPool.burn(lpTokensToBurn, 0, 0, MAX_INT, EMPTY_ADDRESS);
+          await metaPool.burn(lpTokensToBurn, 0, 0, EMPTY_ADDRESS);
 
           const endTightPositionAmounts = await metaPool.tightPosition();
           const endWidePositionAmounts = await metaPool.widePosition();
@@ -465,15 +465,6 @@ describe('MetaPools', function() {
         });
 
         it('should fail to rebalance', async function() {
-          // await swapTest.swap(uniswapPool.address, false, 1000);
-
-          // await ethers.provider.send("evm_increaseTime", [1 * 60]);
-          // await ethers.provider.send("evm_mine");
-          // const oracle = await uniswapPool.observe([5 * 60, 0]);
-          // console.log(oracle.tickCumulatives);
-
-          const { tick, sqrtPriceX96 } = await uniswapPool.slot0();
-          console.log({ tick, sqrtPriceX96 });
           await expect(metaPool.rebalance()).to.be.revertedWith('Slippage');
         })
       });
@@ -484,8 +475,6 @@ describe('MetaPools', function() {
 
           await ethers.provider.send("evm_increaseTime", [6 * 60]);
           await ethers.provider.send("evm_mine");
-
-          // await swapTest.washTrade(uniswapPool.address, '1000', 101, 2);
 
           const { tick, sqrtPriceX96 } = await uniswapPool.slot0();
           console.log('balanced', { tick, sqrtPriceX96 });
@@ -503,7 +492,7 @@ describe('MetaPools', function() {
 
             const lpTokens = await metaPool.balanceOf(await user0.getAddress());
             const lpTokensToBurn = Math.floor(lpTokens * .6);
-            await metaPool.burn(lpTokensToBurn, 0, 0, MAX_INT, EMPTY_ADDRESS);
+            await metaPool.burn(lpTokensToBurn, 0, 0, EMPTY_ADDRESS);
 
             const endTightPositionAmounts = await metaPool.tightPosition();
             const endWidePositionAmounts = await metaPool.widePosition();
@@ -559,16 +548,10 @@ describe('MetaPools', function() {
 
       describe('after lots of unbalanced trading', function() {
         beforeEach(async function() {
-          // await swapTest.washTrade(uniswapPool.address, '1000', 100, 3);
           await swapTest.washTrade(uniswapPool.address, '25', 50, 3);
 
           await ethers.provider.send("evm_increaseTime", [6 * 60]);
           await ethers.provider.send("evm_mine");
-
-          // await swapTest.washTrade(uniswapPool.address, '1000', 100, 3);
-
-          const { tick, sqrtPriceX96 } = await uniswapPool.slot0();
-          console.log('unbalanced', { tick, sqrtPriceX96 });
         });
 
         describe('withdrawal', function() {
@@ -583,7 +566,7 @@ describe('MetaPools', function() {
 
             const lpTokens = await metaPool.balanceOf(await user0.getAddress());
             const lpTokensToBurn = Math.floor(lpTokens * .6);
-            await metaPool.burn(lpTokensToBurn, 0, 0, MAX_INT, EMPTY_ADDRESS);
+            await metaPool.burn(lpTokensToBurn, 0, 0, EMPTY_ADDRESS);
 
             const endTightPositionAmounts = await metaPool.tightPosition();
             const endWidePositionAmounts = await metaPool.widePosition();

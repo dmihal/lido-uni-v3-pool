@@ -138,11 +138,11 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     (uint256 wideToken0, uint256 wideToken1) = LiquidityAmounts.getAmountsForLiquidity(
       sqrtRatioX96, wideLowerSqrtRatioX96, wideUpperSqrtRatioX96, wideLiquidity);
 
-    return (tightToken0 + wideToken0, tightToken1 + wideToken1);
+    return (tightToken0 + wideToken0, tightToken1 + wideToken1); // Can't overflow
   }
 
   /// @notice Return the amount of tokens needed to mint a given amount of LP tokens
-  /// @param newLPTOkens Number of MetaPool LP tokens to simulate minting
+  /// @param newLPTokens Number of MetaPool LP tokens to simulate minting
   /// @return token0Amount Total amount of token0 that will be transfered to mint
   /// @return token1Amount Total amount of token1 that will be transfered to mint
   function previewMint(uint256 newLPTokens) external view returns (
@@ -169,7 +169,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     (uint256 wideToken0, uint256 wideToken1) = LiquidityAmounts.getAmountsForLiquidity(
       sqrtRatioX96, wideLowerSqrtRatioX96, wideUpperSqrtRatioX96, uint128(newWideLiquidity));
 
-    return (tightToken0 + wideToken0, tightToken1 + wideToken1);
+    return (tightToken0.add(wideToken0), tightToken1.add(wideToken1));
   }
 
   ///
@@ -198,7 +198,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       address(this),
       tightLowerTick,
       tightUpperTick,
-      100 * liquidityRatio,
+      100 * liquidityRatio, // Won't overflow, since we assume reasonable liquidityRatio
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 
@@ -207,14 +207,14 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
   /// @notice Deposits tokens into Uniswap positions and mints LP tokens
   /// @dev The caller must have approved the contract to transfer token0 and token1
-  /// @param newLPTOkens Number of MetaPool LP tokens to mint
-  /// @return amount0Max Maximum amount of token0 to deposit, to prevent slippage
-  /// @return amount1Max Maximum amount of token1 to deposit, to prevent slippage
+  /// @param newLPTokens Number of MetaPool LP tokens to mint
+  /// @param amount0Max Maximum amount of token0 to deposit, to prevent slippage
+  /// @param amount1Max Maximum amount of token1 to deposit, to prevent slippage
   function mint(
     uint256 newLPTokens,
     uint256 amount0Max,
     uint256 amount1Max
-  ) external {
+  ) external notPaused {
     (uint128 initialTightLiquidity, , , , ) = pool.positions(tightPositionID);
     (uint128 initialWideLiquidity, , , , ) = pool.positions(widePositionID);
     // Ensure the pool is already initalized
@@ -246,6 +246,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 
+    // Can't overflow
     require(tightToken0 + wideToken0 <= amount0Max && tightToken1 + wideToken1 <= amount1Max, "Slippage");
 
     _mint(msg.sender, newLPTokens);
@@ -315,7 +316,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   }
 
   /// @notice Claim all accrued fees and attempt to re-deposit into Uniswap positions
-  function rebalance() external {
+  function rebalance() external notPaused {
     // Calling burn with 0 liquidity will update fee balances
     pool.burn(tightLowerTick, tightUpperTick, 0);
     pool.burn(wideLowerTick, wideUpperTick, 0);
@@ -398,6 +399,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
         abi.encode(address(this)) // Data field for uniswapV3MintCallback
       );
 
+      // Can't overflow
       amount0 -= (tightToken0 + wideToken0);
       amount1 -= (tightToken1 + wideToken1);
 
@@ -498,7 +500,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     emit Rebalanced(tightLiquidityAdded, wideLiquidityAdded, amount0, amount1);
   }
 
-  /// @notice Ensure that the current price isn't too far from the TWAP price
+  /// @notice Ensure that the current price isn't too far from the 5 minute TWAP price
   function requireMinimalPriceMovement() private view {
     (, int24 currentTick, , , , , ) = pool.slot0();
 
