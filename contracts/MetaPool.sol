@@ -157,7 +157,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
     require(tightLiquidity == 0 && wideLiquidity == 0);
 
-    (uint256 wideToken0, uint256 wideToken1) = pool.mint(
+    pool.mint(
       address(this),
       wideLowerTick,
       wideUpperTick,
@@ -165,7 +165,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 
-    (uint256 tightToken0, uint256 tightToken1) = pool.mint(
+    pool.mint(
       address(this),
       tightLowerTick,
       tightUpperTick,
