@@ -31,6 +31,8 @@ contract ERC20 {
     event Transfer(address indexed from, address indexed to, uint value);
 
     event PauserTransferred(address previousPauser, address newPauser);
+    event Paused();
+    event Unpaused();
 
     constructor() {
         pauser = msg.sender;
@@ -59,6 +61,17 @@ contract ERC20 {
         require(pauser == msg.sender);
         emit PauserTransferred(pauser, newPauser);
         pauser = newPauser;
+    }
+
+    function togglePaused() external {
+        require(pauser == msg.sender);
+        bool _paused = paused;
+        paused = !_paused;
+        if (_paused) {
+            emit Unpaused();
+        } else {
+            emit Paused();
+        }
     }
 
     function _mint(address to, uint value) internal {
