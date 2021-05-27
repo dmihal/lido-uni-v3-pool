@@ -297,9 +297,9 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
     // Withdraw from tight position
     {
-      (uint128 tightLiqiudity,,,,) = pool.positions(tightPositionID);
+      (uint128 tightLiquidity,,,,) = pool.positions(tightPositionID);
 
-      uint256 tightLiquidityBurned = burnAmount.mul(tightLiqiudity) / _totalSupply; // Can't overflow
+      uint256 tightLiquidityBurned = burnAmount.mul(tightLiquidity) / _totalSupply; // Can't overflow
       require(tightLiquidityBurned < type(uint128).max); // Check so we can cast to 128
 
       (amount0, amount1) = pool.burn(tightLowerTick, tightUpperTick, uint128(tightLiquidityBurned));
