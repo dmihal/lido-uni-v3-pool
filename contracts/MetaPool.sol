@@ -172,6 +172,32 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     return (tightToken0.add(wideToken0), tightToken1.add(wideToken1));
   }
 
+  /// @notice Return the amount of tokens returned when burning an amount of LP tokens
+  /// @param burnAmount Number of MetaPool LP tokens to simulate burning
+  /// @return token0Amount Total amount of token0 that will be returned
+  /// @return token1Amount Total amount of token1 that will be returned
+  function previewBurn(uint256 burnAmount) external view returns (
+    uint256 token0Amount,
+    uint256 token1Amount
+  ) {
+    (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+    (uint128 tightLiquidity, , , , ) = pool.positions(tightPositionID);
+    (uint128 wideLiquidity, , , , ) = pool.positions(widePositionID);
+
+    uint256 tightLiquidityBurned = burnAmount.mul(tightLiquidity) / totalSupply; // Can't overflow
+    require(tightLiquidityBurned < type(uint128).max); // Check so we can cast to 128
+
+    uint256 wideLiquidityBurned = burnAmount.mul(wideLiquidity) / totalSupply; // Can't overflow
+    require(wideLiquidityBurned < type(uint128).max); // Check so we can cast to 128
+
+    (uint256 tightToken0, uint256 tightToken1) = LiquidityAmounts.getAmountsForLiquidity(
+      sqrtRatioX96, tightLowerSqrtRatioX96, tightUpperSqrtRatioX96, uint128(tightLiquidityBurned));
+    (uint256 wideToken0, uint256 wideToken1) = LiquidityAmounts.getAmountsForLiquidity(
+      sqrtRatioX96, wideLowerSqrtRatioX96, wideUpperSqrtRatioX96, uint128(wideLiquidityBurned));
+
+    return (tightToken0 + wideToken0, tightToken1 + wideToken1); // Can't overflow
+  }
+
   ///
   //  Mutative functions
   ///
