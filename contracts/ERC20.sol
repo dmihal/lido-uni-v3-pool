@@ -102,6 +102,18 @@ contract ERC20 {
         return true;
     }
 
+    /// @notice Non-standard function to avoid issues with ERC-20 approve
+    function increaseAllowance(address spender, uint256 addedValue) external returns (bool) {
+        _approve(msg.sender, spender, allowance[msg.sender][spender].add(addedValue));
+        return true;
+    }
+
+    /// @notice Non-standard function to avoid issues with ERC-20 approve
+    function decreaseAllowance(address spender, uint256 subtractedValue) external returns (bool) {
+        _approve(msg.sender, spender, allowance[msg.sender][spender].sub(subtractedValue));
+        return true;
+    }
+
     function transfer(address to, uint value) external returns (bool) {
         _transfer(msg.sender, to, value);
         return true;
