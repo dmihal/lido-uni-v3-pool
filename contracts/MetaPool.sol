@@ -116,8 +116,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 token1Amount,
     uint128 liquidity
   ) {
-    bytes32 positionID = keccak256(abi.encodePacked(address(this), wideLowerTick, wideUpperTick));
-    (liquidity,,,,) = pool.positions(positionID);
+    (liquidity,,,,) = pool.positions(widePositionID);
 
     (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
     (token0Amount, token1Amount) = LiquidityAmounts.getAmountsForLiquidity(
@@ -220,11 +219,12 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 
+    require(liquidityRatio * 100 > liquidityRatio); // Prevent overflow
     pool.mint(
       address(this),
       tightLowerTick,
       tightUpperTick,
-      100 * liquidityRatio, // Won't overflow, since we assume reasonable liquidityRatio
+      100 * liquidityRatio, // Overflow checked above
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 
