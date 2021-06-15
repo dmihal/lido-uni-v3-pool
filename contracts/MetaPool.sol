@@ -445,10 +445,10 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
           swapAmount = int256(zeroForOne ? amount0 : amount1);
         } else {
           // If we have a balance of each token, we'll swap the difference between the two
-          uint256 equivelantAmount0 = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount1), token1, token0);
-          zeroForOne = amount0 > equivelantAmount0;
+          uint256 equivalentAmount0 = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount1), token1, token0);
+          zeroForOne = amount0 > equivalentAmount0;
           swapAmount = zeroForOne
-            ? int256(amount0 - equivelantAmount0)
+            ? int256(amount0 - equivalentAmount0)
             : int256(amount1 - UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount0), token0, token1));
         }
 
