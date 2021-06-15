@@ -302,16 +302,21 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       uint256 tightLiquidityBurned = burnAmount.mul(tightLiquidity) / _totalSupply; // Can't overflow
       require(tightLiquidityBurned < type(uint128).max); // Check so we can cast to 128
 
-      (amount0, amount1) = pool.burn(tightLowerTick, tightUpperTick, uint128(tightLiquidityBurned));
+      (uint256 amount0Requested, uint256 amount1Requested) = pool.burn(
+        tightLowerTick,
+        tightUpperTick,
+        uint128(tightLiquidityBurned)
+      );
 
       // Withdraw tokens to user
-      pool.collect(
+      (amount0, amount1) = pool.collect(
         recipient,
         tightLowerTick,
         tightUpperTick,
-        uint128(amount0), // cast can't overflow
-        uint128(amount1) // cast can't overflow
+        uint128(amount0Requested), // cast can't overflow
+        uint128(amount1Requested) // cast can't overflow
       );
+      require(amount0 >= amount0Requested || amount1 >= amount1Requested);
     }
 
     // Withdraw from wide position
@@ -324,18 +329,19 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       (uint256 wideAmount0, uint256 wideAmount1) =
         pool.burn(wideLowerTick, wideUpperTick, uint128(wideLiquidityBurned));
 
-      // Can't overflow
-      amount0 += wideAmount0;
-      amount1 += wideAmount1;
-
       // Withdraw tokens to user
-      pool.collect(
+      (uint128 amount0Collected, uint128 amount1Collected) = pool.collect(
         recipient,
         wideLowerTick,
         wideUpperTick,
         uint128(wideAmount0), // cast can't overflow
         uint128(wideAmount1) // cast can't overflow
       );
+      require(amount0Collected >= wideAmount0 || amount1Collected >= wideAmount1);
+
+      // Can't overflow
+      amount0 += amount0Collected;
+      amount1 += amount1Collected;
     }
 
     require(amount0 >= amount0Min && amount1 >= amount1Min, "Slippage");
@@ -346,6 +352,10 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     // Calling burn with 0 liquidity will update fee balances
     pool.burn(tightLowerTick, tightUpperTick, 0);
     pool.burn(wideLowerTick, wideUpperTick, 0);
+
+    // We don't need to keep track of the tokens returned by the following collect
+    // calls, since deposit() will check balanceOf. This allows us to include any
+    // dust left over from previous rebalances.
 
     // Collect fees from tight range
     pool.collect(
