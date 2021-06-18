@@ -374,9 +374,9 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   //  Private functions
   ///
 
+  /// @notice Tries to deposit remaining tokens into pool, distributing new liquidity to all users
   function deposit() private {
     requireMinimalPriceMovement();
-    (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
     // Query the actual balances, so we can soop up any un-deposited
     // tokens from the last rebalance
@@ -387,28 +387,10 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint128 tightLiquidityAdded;
     uint128 wideLiquidityAdded;
 
+    (uint128 newTightLiquidity, uint128 newWideLiquidity) = getLiquidityFromAmounts(amount0, amount1);
+    (newTightLiquidity, newWideLiquidity) = balanceLiquidity(newTightLiquidity, newWideLiquidity);
+
     {
-      uint256 tightAmount0Desired = amount0.mul(8000) / 10000; // 80%
-      uint256 tightAmount1Desired = amount1.mul(8000) / 10000; // 80%
-      uint256 wideAmount0Desired = amount0.mul(2000) / 10000; // 20%
-      uint256 wideAmount1Desired = amount1.mul(2000) / 10000; // 20%
-
-      uint128 newTightLiquidity = LiquidityAmounts.getLiquidityForAmounts(
-        sqrtRatioX96,
-        tightLowerSqrtRatioX96,
-        tightUpperSqrtRatioX96,
-        tightAmount0Desired,
-        tightAmount1Desired
-      );
-
-      uint128 newWideLiquidity = LiquidityAmounts.getLiquidityForAmounts(
-        sqrtRatioX96,
-        wideLowerSqrtRatioX96,
-        wideUpperSqrtRatioX96,
-        wideAmount0Desired,
-        wideAmount1Desired
-      );
-
       (uint256 tightToken0, uint256 tightToken1) = pool.mint(
         address(this),
         tightLowerTick,
@@ -433,97 +415,155 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       wideLiquidityAdded += newWideLiquidity;
     }
 
-    // If we still have some left-over, we need to swap so it's balanced
-    // We check if it's bigger than 2, since there's no use in swapping dust
-    if (amount0 > 2 || amount1 > 2) {
-      {
-        bool zeroForOne;
-        int256 swapAmount;
-        if (amount0 <= 2 || amount1 <= 2) {
-          // If we only have a balance of one token, we'll swap half of it into the other token
-          zeroForOne = amount0 > amount1;
-          swapAmount = int256(zeroForOne ? amount0 : amount1);
-        } else {
-          // If we have a balance of each token, we'll swap the difference between the two
-          uint256 equivelantAmount0 = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount1), token1, token0);
-          zeroForOne = amount0 > equivelantAmount0;
-          swapAmount = zeroForOne
-            ? int256(amount0 - equivelantAmount0)
-            : int256(amount1 - UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount0), token0, token1));
-        }
+    emit Rebalanced(tightLiquidityAdded, wideLiquidityAdded, amount0, amount1);
+  }
 
-        (address fromAddr, address toAddr) = zeroForOne ? (token0, token1) : (token1, token0);
-        // Approximate the price ratio by getting a quote for 1e10
-        // This approximation lets us avoid doing decimal exponent math
-        uint256 price = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, 1e10, fromAddr, toAddr);
-        // Multiply the starting swap amount by the price ratio
-        // If the pool is balanced, this will end up being equivelant to `swapAmount / 2`
-        swapAmount = swapAmount * 1e10 / int256(1e10 + price);
+  /// @notice Calculates tight & wide liquidity values that are roughly within the liquidity ratio
+  /// @param token0Amount Amount of token0 to deposit
+  /// @param token1Amount Amount of token1 to deposit
+  /// @return newTightLiquidity Calculated amount of tight liquidity
+  /// @return newWideLiquidity Calculated amount of wide liquidity
+  function getLiquidityFromAmounts(
+    uint256 token0Amount,
+    uint256 token1Amount
+  ) private view returns (
+    uint128 newTightLiquidity,
+    uint128 newWideLiquidity
+  ) {
+    (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
-        (int256 amount0Delta, int256 amount1Delta) = pool.swap(
-          address(this),
-          zeroForOne,
-          swapAmount,
-          zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
-          abi.encode(address(this))
-        );
+    uint256 token0Wide = token0Amount / (liquidityRatio + 1);
+    uint256 token1Wide = token1Amount / (liquidityRatio + 1);
 
-        amount0 = uint256(int256(amount0) - amount0Delta);
-        amount1 = uint256(int256(amount1) - amount1Delta);
-      }
+    uint256 token0Tight = token0Amount.mul(liquidityRatio) / (liquidityRatio + 1);
+    uint256 token1Tight = token1Amount.mul(liquidityRatio) / (liquidityRatio + 1);
 
-      // Add liquidity a second time
-      {
-        uint256 tightAmount0Desired = amount0.mul(8000) / 10000; // 80%
-        uint256 tightAmount1Desired = amount1.mul(8000) / 10000; // 80%
-        uint256 wideAmount0Desired = amount0.mul(2000) / 10000; // 20%
-        uint256 wideAmount1Desired = amount1.mul(2000) / 10000; // 20%
+    if (sqrtRatioX96 < tightUpperSqrtRatioX96 && sqrtRatioX96 > tightLowerSqrtRatioX96) {
+      // --|---|-----|---|--
+      //   |      ^      |
 
-        uint128 newTightLiquidity = LiquidityAmounts.getLiquidityForAmounts(
-          sqrtRatioX96,
-          tightLowerSqrtRatioX96,
-          tightUpperSqrtRatioX96,
-          tightAmount0Desired,
-          tightAmount1Desired
-        );
+      uint128 tightLiquidity0 = LiquidityAmounts.getLiquidityForAmount0(
+        sqrtRatioX96,
+        tightUpperSqrtRatioX96,
+        token0Tight
+      );
+      uint128 tightLiquidity1 = LiquidityAmounts.getLiquidityForAmount1(
+        tightLowerSqrtRatioX96,
+        sqrtRatioX96,
+        token1Wide
+      );
 
-        uint128 newWideLiquidity = LiquidityAmounts.getLiquidityForAmounts(
-          sqrtRatioX96,
-          wideLowerSqrtRatioX96,
-          wideUpperSqrtRatioX96,
-          wideAmount0Desired,
-          wideAmount1Desired
-        );
+      uint128 wideLiquidity0 = LiquidityAmounts.getLiquidityForAmount0(
+        sqrtRatioX96,
+        wideUpperSqrtRatioX96,
+        token0Tight
+      );
+      uint128 wideLiquidity1 = LiquidityAmounts.getLiquidityForAmount1(
+        wideLowerSqrtRatioX96,
+        sqrtRatioX96,
+        token1Wide
+      );
 
-        if (newTightLiquidity > 0) {
-          (uint256 tightToken0, uint256 tightToken1) = pool.mint(
-            address(this),
-            tightLowerTick,
-            tightUpperTick,
-            newTightLiquidity,
-            abi.encode(address(this)) // Data field for uniswapV3MintCallback
-          );
-          amount0 -= tightToken0;
-          amount1 -= tightToken1;
-          tightLiquidityAdded += newTightLiquidity;
-        }
-
-        if (newWideLiquidity > 0) {
-          (uint256 wideToken0, uint256 wideToken1) = pool.mint(
-            address(this),
-            wideLowerTick,
-            wideUpperTick,
-            newWideLiquidity,
-            abi.encode(address(this)) // Data field for uniswapV3MintCallback
-          );
-          amount0 -= wideToken0;
-          amount1 -= wideToken1;
-          wideLiquidityAdded += newWideLiquidity;
-        }
+      if (tightLiquidity0 < tightLiquidity1 && wideLiquidity0 < wideLiquidity1) {
+        return (tightLiquidity0, wideLiquidity0);
+      } else /*if (tightLiquidity0 >= tightLiquidity1 && wideLiquidity0 >= wideLiquidity1)*/ {
+        return (tightLiquidity1, wideLiquidity1);
       }
     }
 
-    emit Rebalanced(tightLiquidityAdded, wideLiquidityAdded, amount0, amount1);
+    else if (sqrtRatioX96 > tightUpperSqrtRatioX96) {
+      uint128 tightLiquidity = LiquidityAmounts.getLiquidityForAmount1(
+        tightLowerSqrtRatioX96,
+        tightUpperSqrtRatioX96,
+        token1Tight
+      );
+      uint128 wideLiquidity;
+
+      if (sqrtRatioX96 < wideUpperSqrtRatioX96) {
+        // --|---|-----|---|--
+        //   |           ^ |
+
+        uint128 wideLiquidity0 = LiquidityAmounts.getLiquidityForAmount0(
+          sqrtRatioX96,
+          wideUpperSqrtRatioX96,
+          token0Wide
+        );
+        uint128 wideLiquidity1 = LiquidityAmounts.getLiquidityForAmount1(
+          wideLowerSqrtRatioX96,
+          sqrtRatioX96,
+          token1Wide
+        );
+
+        wideLiquidity = wideLiquidity0 < wideLiquidity1 ? wideLiquidity0 : wideLiquidity1;
+      } else {
+        // --|---|-----|---|--
+        //   |             | ^
+
+        wideLiquidity = LiquidityAmounts.getLiquidityForAmount1(
+          wideLowerSqrtRatioX96,
+          wideUpperSqrtRatioX96,
+          token1Wide
+        );
+      }
+
+      return (tightLiquidity, wideLiquidity);
+    }
+
+    else /*if (sqrtRatioX96 < tightLowerSqrtRatioX96)*/ {
+      uint128 tightLiquidity = LiquidityAmounts.getLiquidityForAmount0(
+        tightLowerSqrtRatioX96,
+        tightUpperSqrtRatioX96,
+        token0Tight
+      );
+      uint128 wideLiquidity;
+
+      if (sqrtRatioX96 > wideLowerSqrtRatioX96) {
+        // --|---|-----|---|--
+        //   | ^           |
+
+        uint128 wideLiquidity0 = LiquidityAmounts.getLiquidityForAmount0(
+          sqrtRatioX96,
+          wideUpperSqrtRatioX96,
+          token0Wide
+        );
+        uint128 wideLiquidity1 = LiquidityAmounts.getLiquidityForAmount1(
+          wideLowerSqrtRatioX96,
+          sqrtRatioX96,
+          token1Wide
+        );
+
+        wideLiquidity = wideLiquidity0 < wideLiquidity1 ? wideLiquidity0 : wideLiquidity1;
+      } else {
+        // --|---|-----|---|--
+        // ^ |             |
+
+        wideLiquidity = LiquidityAmounts.getLiquidityForAmount0(
+          wideLowerSqrtRatioX96,
+          wideUpperSqrtRatioX96,
+          token0Wide
+        );
+      }
+      
+      return (tightLiquidity, wideLiquidity);
+    }
+  }
+
+  /// @notice Takes a tight & wide liquidity amount, and rounds them down so they match the liquidity ratio
+  /// @param tightLiquidity Input amount of tight liquidity
+  /// @param wideLiquidity Input amount of tight liquidity
+  /// @return Output rounded amount of tight liquidity
+  /// @return Output rounded amount of wide liquidity
+  function balanceLiquidity(
+    uint128 tightLiquidity,
+    uint128 wideLiquidity
+  ) private view returns (uint128, uint128) {
+    uint128 roundDownTightLiquidity = wideLiquidity * liquidityRatio;
+    require(roundDownTightLiquidity > wideLiquidity, 'Overflow');
+    uint128 roundDownWideLiquidity = tightLiquidity / liquidityRatio;
+
+    return roundDownTightLiquidity < tightLiquidity
+      ? (roundDownTightLiquidity, wideLiquidity)
+      : (tightLiquidity, roundDownWideLiquidity);
   }
 
   /// @notice Ensure that the current price isn't too far from the 5 minute TWAP price
