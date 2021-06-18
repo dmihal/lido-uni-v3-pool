@@ -3,10 +3,6 @@ pragma solidity ^0.7.0;
 
 import './uniswap-v3/libraries/LowGasSafeMath.sol';
 
-interface ERC677Receiver {
-    function onTokenTransfer(address _sender, uint _value, bytes calldata _data) external;
-}
-
 contract ERC20 {
     using LowGasSafeMath for uint;
 
@@ -136,7 +132,19 @@ contract ERC20 {
 
         _transfer(msg.sender, to, value);
 
-        ERC677Receiver(to).onTokenTransfer(msg.sender, value, data);
+        // Some implementations of ERC677 receivers return a boolean, some don't return
+        // anything. We'll support both using a low-level call, similar to TransferHelper
+        bytes memory transferCalldata = abi.encodeWithSignature(
+            'onTokenTransfer(address,uint256,bytes)',
+            msg.sender,
+            value,
+            data
+        );
+        (bool success, bytes memory returnData) = to.call(transferCalldata);
+        require(
+            success && (returnData.length == 0 || abi.decode(returnData, (bool))),
+            'onTokenTransfer failed'
+        );
 
         return true;
     }
