@@ -71,6 +71,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
     _pool.increaseObservationCardinalityNext(30);
 
+    require(_tightLowerTick > _wideLowerTick && _tightUpperTick < _wideUpperTick, "BOUNDS");
+
     tightLowerTick = _tightLowerTick;
     tightUpperTick = _tightUpperTick;
     wideLowerTick = _wideLowerTick;
