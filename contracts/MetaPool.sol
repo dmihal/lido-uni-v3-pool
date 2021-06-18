@@ -116,8 +116,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 token1Amount,
     uint128 liquidity
   ) {
-    bytes32 positionID = keccak256(abi.encodePacked(address(this), wideLowerTick, wideUpperTick));
-    (liquidity,,,,) = pool.positions(positionID);
+    (liquidity,,,,) = pool.positions(widePositionID);
 
     (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
     (token0Amount, token1Amount) = LiquidityAmounts.getAmountsForLiquidity(
@@ -220,11 +219,12 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 
+    require(liquidityRatio * 100 > liquidityRatio); // Prevent overflow
     pool.mint(
       address(this),
       tightLowerTick,
       tightUpperTick,
-      100 * liquidityRatio, // Won't overflow, since we assume reasonable liquidityRatio
+      100 * liquidityRatio, // Overflow checked above
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 
@@ -445,10 +445,10 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
           swapAmount = int256(zeroForOne ? amount0 : amount1);
         } else {
           // If we have a balance of each token, we'll swap the difference between the two
-          uint256 equivelantAmount0 = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount1), token1, token0);
-          zeroForOne = amount0 > equivelantAmount0;
+          uint256 equivalentAmount0 = UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount1), token1, token0);
+          zeroForOne = amount0 > equivalentAmount0;
           swapAmount = zeroForOne
-            ? int256(amount0 - equivelantAmount0)
+            ? int256(amount0 - equivalentAmount0)
             : int256(amount1 - UniMathHelpers.getQuoteFromSqrt(sqrtRatioX96, uint128(amount0), token0, token1));
         }
 
