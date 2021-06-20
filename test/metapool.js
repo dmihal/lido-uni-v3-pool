@@ -641,6 +641,44 @@ describe('MetaPools', function() {
             });
           });
         });
+
+        describe('with the price outside of the pool ranges', function() {
+          beforeEach(async function() {
+            await swapTest.swap(uniswapPool.address, true, 10000);
+
+            // Pass time for the TWAP
+            await ethers.provider.send("evm_increaseTime", [10 * 60]);
+            await ethers.provider.send("evm_mine");
+
+            initialTightPosition = await metaPool.tightPosition();
+            initialWidePosition = await metaPool.widePosition();
+
+            const { tick } = await uniswapPool.slot0();
+            expect(tick).to.be.lessThan(TICK_1_03);
+          });
+
+          describe('rebalance', function() {
+            it('should redeposit fees with a rebalance', async function() {
+              const startingPositionAmounts = await metaPool.totalPosition();
+              const startingTightPositionAmounts = await metaPool.tightPosition();
+              const startingWidePositionAmounts = await metaPool.widePosition();
+
+              await logRebalance(metaPool.rebalance());
+
+              const endTightPositionAmounts = await metaPool.tightPosition();
+              const endWidePositionAmounts = await metaPool.widePosition();
+
+              const liquidityRatio = endTightPositionAmounts.liquidity.toString()
+                / endWidePositionAmounts.liquidity.toString();
+              expect(liquidityRatio).to.be.closeTo(LIQUIDITY_RATIO, 0.0001);
+
+              expect(toInt(endTightPositionAmounts.liquidity))
+                .to.be.greaterThan(toInt(startingTightPositionAmounts.liquidity));
+              expect(toInt(endWidePositionAmounts.liquidity))
+                .to.be.greaterThan(toInt(startingWidePositionAmounts.liquidity));
+            });
+          });
+        });
       });
 
       describe('after lots of unbalanced trading', function() {
