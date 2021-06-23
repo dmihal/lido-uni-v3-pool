@@ -62,7 +62,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   /// @param _wideLowerTick Lower tick to use for the wide position
   /// @param _wideUpperTick Upper tick to use for the wide position
   /// @param _maxTickMovement Maximum number of ticks between the current tick & TWAP for rebalancing
-  /// @param _liquidityRatio Default ratio of wide liquidity to tight liquidity
+  /// @param _liquidityRatio Default ratio of tight liquidity to wide liquidity
   constructor(
     IUniswapV3Pool _pool,
     int24 _tightLowerTick,
