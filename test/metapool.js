@@ -517,13 +517,6 @@ describe('MetaPools', function() {
               .to.equal(Math.round((startingSupply - 100) * 0.4) + 100);
             expect(await metaPool.balanceOf(await user0.getAddress()))
               .to.equal(Math.round((startingSupply - 100) * 0.4));
-
-            // Tollerance of 4 since each token of each position will round down
-            // TODO: calculate these
-            // expect(toInt(await token0.balanceOf(EMPTY_ADDRESS)))
-            //   .to.be.closeTo(Math.round((startingToken0 - toInt(initialPosition.token0Amount)) * 0.6), 4);
-            // expect(toInt(await token1.balanceOf(EMPTY_ADDRESS)))
-            //   .to.be.closeTo(Math.round((startingToken1 - toInt(initialPosition.token1Amount)) * 0.6), 4);
             });
           });
 
@@ -632,12 +625,6 @@ describe('MetaPools', function() {
               .to.be.greaterThan(0);
             expect(toInt(await token1.balanceOf(EMPTY_ADDRESS)))
               .to.be.greaterThan(0);
-
-            // Tollerance of 4 since each token of each position will round down
-            // expect(toInt(await token0.balanceOf(EMPTY_ADDRESS)))
-            //   .to.be.closeTo(Math.round((startingToken0 - toInt(initialPosition.token0Amount)) * 0.6), 4);
-            // expect(toInt(await token1.balanceOf(EMPTY_ADDRESS)))
-            //   .to.be.closeTo(Math.round((startingToken1 - toInt(initialPosition.token1Amount)) * 0.6), 4);
           });
         });
 
