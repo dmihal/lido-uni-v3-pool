@@ -59,6 +59,7 @@ contract ERC20 {
 
     function transferPauser(address newPauser) external {
         require(pauser == msg.sender);
+        require(newPauser != address(0));
         emit PauserTransferred(pauser, newPauser);
         pauser = newPauser;
     }
@@ -81,17 +82,20 @@ contract ERC20 {
     }
 
     function _burn(address from, uint value) internal {
+        require(from != address(0));
         balanceOf[from] = balanceOf[from].sub(value);
         totalSupply = uint248(uint(totalSupply).sub(value));
         emit Transfer(from, address(0), value);
     }
 
     function _approve(address owner, address spender, uint value) private {
+        require(spender != address(0));
         allowance[owner][spender] = value;
         emit Approval(owner, spender, value);
     }
 
     function _transfer(address from, address to, uint value) private {
+        require(to != address(0));
         balanceOf[from] = balanceOf[from].sub(value);
         balanceOf[to] = balanceOf[to].add(value);
         emit Transfer(from, to, value);
