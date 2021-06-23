@@ -5,13 +5,13 @@ import { IUniswapV3Pool } from "./uniswap-v3/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3Factory } from "./uniswap-v3/interfaces/IUniswapV3Factory.sol";
 import { IUniswapV3MintCallback } from "./uniswap-v3/interfaces/callback/IUniswapV3MintCallback.sol";
 import { IUniswapV3SwapCallback } from "./uniswap-v3/interfaces/callback/IUniswapV3SwapCallback.sol";
-import { LowGasSafeMath } from "./uniswap-v3/libraries/LowGasSafeMath.sol";
 import { SqrtPriceMath } from "./uniswap-v3/libraries/SqrtPriceMath.sol";
 import { TickMath } from "./uniswap-v3/libraries/TickMath.sol";
 import { IERC20Minimal } from './uniswap-v3/interfaces/IERC20Minimal.sol';
 
 import { TransferHelper } from "./libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./libraries/LiquidityAmounts.sol";
+import { LowGasSafeMath } from "./libraries/LowGasSafeMath.sol";
 import { UniMathHelpers } from "./libraries/UniMathHelpers.sol";
 import { ERC20 } from "./ERC20.sol";
 
@@ -19,6 +19,7 @@ import { ERC20 } from "./ERC20.sol";
 /// @author David Mihal
 contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   using LowGasSafeMath for uint256;
+  using LowGasSafeMath for uint128;
 
   IUniswapV3Pool public immutable pool;
 
@@ -41,6 +42,10 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
   bytes32 public immutable tightPositionID;
   bytes32 public immutable widePositionID;
+
+  // We must track our own liquidity, to prevent someone from manipulating the liquidity ratio
+  uint128 private tightLiquidity;
+  uint128 private wideLiquidity;
 
   event Rebalanced(
     uint128 newTightLiquidity,
@@ -100,8 +105,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 token1Amount,
     uint128 liquidity
   ) {
-    (liquidity,,,,) = pool.positions(tightPositionID);
-
+    liquidity = tightLiquidity;
     (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
     (token0Amount, token1Amount) = LiquidityAmounts.getAmountsForLiquidity(
       sqrtRatioX96, tightLowerSqrtRatioX96, tightUpperSqrtRatioX96, liquidity);
@@ -116,9 +120,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 token1Amount,
     uint128 liquidity
   ) {
-    bytes32 positionID = keccak256(abi.encodePacked(address(this), wideLowerTick, wideUpperTick));
-    (liquidity,,,,) = pool.positions(positionID);
-
+    liquidity = wideLiquidity;
     (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
     (token0Amount, token1Amount) = LiquidityAmounts.getAmountsForLiquidity(
       sqrtRatioX96, wideLowerSqrtRatioX96, wideUpperSqrtRatioX96, liquidity);
@@ -130,11 +132,9 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   function totalPosition() external view returns (uint256 token0Amount, uint256 token1Amount) {
     (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
-    (uint128 tightLiquidity,,,,) = pool.positions(tightPositionID);
     (uint256 tightToken0, uint256 tightToken1) = LiquidityAmounts.getAmountsForLiquidity(
       sqrtRatioX96, tightLowerSqrtRatioX96, tightUpperSqrtRatioX96, tightLiquidity);
 
-    (uint128 wideLiquidity,,,,) = pool.positions(widePositionID);
     (uint256 wideToken0, uint256 wideToken1) = LiquidityAmounts.getAmountsForLiquidity(
       sqrtRatioX96, wideLowerSqrtRatioX96, wideUpperSqrtRatioX96, wideLiquidity);
 
@@ -149,15 +149,13 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 token0Amount,
     uint256 token1Amount
   ) {
-    (uint128 initialTightLiquidity, , , , ) = pool.positions(tightPositionID);
-    (uint128 initialWideLiquidity, , , , ) = pool.positions(widePositionID);
-    require(initialTightLiquidity > 0 && initialWideLiquidity > 0, "INI");
+    require(tightLiquidity > 0 && wideLiquidity > 0, "INI");
 
     (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
     uint256 _totalSupply = totalSupply; // Single SLOAD for gas saving
-    uint256 newTightLiquidity = newLPTokens.mul(initialTightLiquidity) / _totalSupply;
-    uint256 newWideLiquidity = newLPTokens.mul(initialWideLiquidity) / _totalSupply;
+    uint256 newTightLiquidity = newLPTokens.mul(tightLiquidity) / _totalSupply;
+    uint256 newWideLiquidity = newLPTokens.mul(wideLiquidity) / _totalSupply;
 
     // Check so we can cast to 128
     require(newTightLiquidity < type(uint128).max);
@@ -181,8 +179,6 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 token1Amount
   ) {
     (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-    (uint128 tightLiquidity, , , , ) = pool.positions(tightPositionID);
-    (uint128 wideLiquidity, , , , ) = pool.positions(widePositionID);
 
     uint256 tightLiquidityBurned = burnAmount.mul(tightLiquidity) / totalSupply; // Can't overflow
     require(tightLiquidityBurned < type(uint128).max); // Check so we can cast to 128
@@ -206,9 +202,6 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   ///         and minting LP tokens to 0x0
   /// @dev The caller must have approved the contract to transfer token0 and token1
   function initialize() external {
-    (uint128 tightLiquidity, , , , ) = pool.positions(tightPositionID);
-    (uint128 wideLiquidity, , , , ) = pool.positions(widePositionID);
-
     // Ensure the pool hasn't been initialized yet
     require(tightLiquidity == 0 && wideLiquidity == 0);
 
@@ -220,13 +213,17 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 
+    require(liquidityRatio * 100 > liquidityRatio); // Prevent overflow
     pool.mint(
       address(this),
       tightLowerTick,
       tightUpperTick,
-      100 * liquidityRatio, // Won't overflow, since we assume reasonable liquidityRatio
+      100 * liquidityRatio,
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
+
+    wideLiquidity = 100;
+    tightLiquidity = 100 * liquidityRatio;
 
     _mint(address(0), 100);
   }
@@ -241,8 +238,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 amount0Max,
     uint256 amount1Max
   ) external notPaused {
-    (uint128 initialTightLiquidity, , , , ) = pool.positions(tightPositionID);
-    (uint128 initialWideLiquidity, , , , ) = pool.positions(widePositionID);
+    (uint128 initialTightLiquidity, uint128 initialWideLiquidity) = (tightLiquidity, wideLiquidity); // Single SLOAD
     // Ensure the pool is already initalized
     require(initialTightLiquidity > 0 && initialWideLiquidity > 0, "INI");
 
@@ -275,6 +271,9 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     // Can't overflow
     require(tightToken0 + wideToken0 <= amount0Max && tightToken1 + wideToken1 <= amount1Max, "Slippage");
 
+    tightLiquidity = initialTightLiquidity.add128(uint128(newTightLiquidity));
+    wideLiquidity = initialWideLiquidity.add128(uint128(newWideLiquidity));
+
     _mint(msg.sender, newLPTokens);
   }
 
@@ -295,11 +294,12 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
     _burn(msg.sender, burnAmount);
 
+    uint256 tightLiquidityBurned;
+    uint256 wideLiquidityBurned;
+
     // Withdraw from tight position
     {
-      (uint128 tightLiquidity,,,,) = pool.positions(tightPositionID);
-
-      uint256 tightLiquidityBurned = burnAmount.mul(tightLiquidity) / _totalSupply; // Can't overflow
+      tightLiquidityBurned = burnAmount.mul(tightLiquidity) / _totalSupply; // Can't overflow
       require(tightLiquidityBurned < type(uint128).max); // Check so we can cast to 128
 
       (amount0, amount1) = pool.burn(tightLowerTick, tightUpperTick, uint128(tightLiquidityBurned));
@@ -316,9 +316,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
 
     // Withdraw from wide position
     {
-      (uint128 wideLiquidity,,,,) = pool.positions(widePositionID);
-
-      uint256 wideLiquidityBurned = burnAmount.mul(wideLiquidity) / _totalSupply; // Can't overflow
+      wideLiquidityBurned = burnAmount.mul(wideLiquidity) / _totalSupply; // Can't overflow
       require(wideLiquidityBurned < type(uint128).max); // Check so we can cast to 128
 
       (uint256 wideAmount0, uint256 wideAmount1) =
@@ -339,6 +337,9 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     }
 
     require(amount0 >= amount0Min && amount1 >= amount1Min, "Slippage");
+
+    tightLiquidity = tightLiquidity.sub128(uint128(tightLiquidityBurned));
+    wideLiquidity = wideLiquidity.sub128(uint128(wideLiquidityBurned));
   }
 
   /// @notice Claim all accrued fees and attempt to re-deposit into Uniswap positions
@@ -383,10 +384,6 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     uint256 amount0 = IERC20Minimal(token0).balanceOf(address(this));
     uint256 amount1 = IERC20Minimal(token1).balanceOf(address(this));
 
-    // Total liquidity values, only used for logging
-    uint128 tightLiquidityAdded;
-    uint128 wideLiquidityAdded;
-
     (uint128 newTightLiquidity, uint128 newWideLiquidity) = getLiquidityFromAmounts(amount0, amount1);
     (newTightLiquidity, newWideLiquidity) = balanceLiquidity(newTightLiquidity, newWideLiquidity);
 
@@ -410,12 +407,12 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       // Can't overflow
       amount0 -= (tightToken0 + wideToken0);
       amount1 -= (tightToken1 + wideToken1);
-
-      tightLiquidityAdded += newTightLiquidity;
-      wideLiquidityAdded += newWideLiquidity;
     }
 
-    emit Rebalanced(tightLiquidityAdded, wideLiquidityAdded, amount0, amount1);
+    tightLiquidity = tightLiquidity.add128(newTightLiquidity);
+    wideLiquidity = wideLiquidity.add128(newWideLiquidity);
+
+    emit Rebalanced(newTightLiquidity, newWideLiquidity, amount0, amount1);
   }
 
   /// @notice Calculates tight & wide liquidity values that are roughly within the liquidity ratio
@@ -472,12 +469,12 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
     }
 
     else if (sqrtRatioX96 > tightUpperSqrtRatioX96) {
-      uint128 tightLiquidity = LiquidityAmounts.getLiquidityForAmount1(
+      uint128 _tightLiquidity = LiquidityAmounts.getLiquidityForAmount1(
         tightLowerSqrtRatioX96,
         tightUpperSqrtRatioX96,
         token1Tight
       );
-      uint128 wideLiquidity;
+      uint128 _wideLiquidity;
 
       if (sqrtRatioX96 < wideUpperSqrtRatioX96) {
         // --|---|-----|---|--
@@ -494,28 +491,28 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
           token1Wide
         );
 
-        wideLiquidity = wideLiquidity0 < wideLiquidity1 ? wideLiquidity0 : wideLiquidity1;
+        _wideLiquidity = wideLiquidity0 < wideLiquidity1 ? wideLiquidity0 : wideLiquidity1;
       } else {
         // --|---|-----|---|--
         //   |             | ^
 
-        wideLiquidity = LiquidityAmounts.getLiquidityForAmount1(
+        _wideLiquidity = LiquidityAmounts.getLiquidityForAmount1(
           wideLowerSqrtRatioX96,
           wideUpperSqrtRatioX96,
           token1Wide
         );
       }
 
-      return (tightLiquidity, wideLiquidity);
+      return (_tightLiquidity, _wideLiquidity);
     }
 
     else /*if (sqrtRatioX96 < tightLowerSqrtRatioX96)*/ {
-      uint128 tightLiquidity = LiquidityAmounts.getLiquidityForAmount0(
+      uint128 _tightLiquidity = LiquidityAmounts.getLiquidityForAmount0(
         tightLowerSqrtRatioX96,
         tightUpperSqrtRatioX96,
         token0Tight
       );
-      uint128 wideLiquidity;
+      uint128 _wideLiquidity;
 
       if (sqrtRatioX96 > wideLowerSqrtRatioX96) {
         // --|---|-----|---|--
@@ -532,19 +529,19 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
           token1Wide
         );
 
-        wideLiquidity = wideLiquidity0 < wideLiquidity1 ? wideLiquidity0 : wideLiquidity1;
+        _wideLiquidity = wideLiquidity0 < wideLiquidity1 ? wideLiquidity0 : wideLiquidity1;
       } else {
         // --|---|-----|---|--
         // ^ |             |
 
-        wideLiquidity = LiquidityAmounts.getLiquidityForAmount0(
+        _wideLiquidity = LiquidityAmounts.getLiquidityForAmount0(
           wideLowerSqrtRatioX96,
           wideUpperSqrtRatioX96,
           token0Wide
         );
       }
       
-      return (tightLiquidity, wideLiquidity);
+      return (_tightLiquidity, _wideLiquidity);
     }
   }
 
@@ -554,16 +551,16 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   /// @return Output rounded amount of tight liquidity
   /// @return Output rounded amount of wide liquidity
   function balanceLiquidity(
-    uint128 tightLiquidity,
-    uint128 wideLiquidity
+    uint128 _tightLiquidity,
+    uint128 _wideLiquidity
   ) private view returns (uint128, uint128) {
-    uint128 roundDownTightLiquidity = wideLiquidity * liquidityRatio;
-    require(roundDownTightLiquidity > wideLiquidity, 'Overflow');
-    uint128 roundDownWideLiquidity = tightLiquidity / liquidityRatio;
+    uint128 roundDownTightLiquidity = _wideLiquidity * liquidityRatio;
+    require(roundDownTightLiquidity > _wideLiquidity, 'Overflow');
+    uint128 roundDownWideLiquidity = _tightLiquidity / liquidityRatio;
 
-    return roundDownTightLiquidity < tightLiquidity
-      ? (roundDownTightLiquidity, wideLiquidity)
-      : (tightLiquidity, roundDownWideLiquidity);
+    return roundDownTightLiquidity < _tightLiquidity
+      ? (roundDownTightLiquidity, _wideLiquidity)
+      : (_tightLiquidity, roundDownWideLiquidity);
   }
 
   /// @notice Ensure that the current price isn't too far from the 5 minute TWAP price
