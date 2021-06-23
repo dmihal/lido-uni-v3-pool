@@ -222,7 +222,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       address(this),
       tightLowerTick,
       tightUpperTick,
-      100 * liquidityRatio,
+      100 * liquidityRatio, // Overflow checked above
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 
