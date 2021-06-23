@@ -3,10 +3,6 @@ pragma solidity ^0.7.0;
 
 import './uniswap-v3/libraries/LowGasSafeMath.sol';
 
-interface ERC677Receiver {
-    function onTokenTransfer(address _sender, uint _value, bytes calldata _data) external;
-}
-
 /// @notice Modified from the Uniswap V2 ERC20 contract
 ///         Adds a built-in "pauser" role which can be used by inherited contracts.
 ///         Pauser is added to this contract in order to minimize SLOAD operations, by
@@ -152,7 +148,19 @@ contract ERC20 {
 
         _transfer(msg.sender, to, value);
 
-        ERC677Receiver(to).onTokenTransfer(msg.sender, value, data);
+        // Some implementations of ERC677 receivers return a boolean, some don't return
+        // anything. We'll support both using a low-level call, similar to TransferHelper
+        bytes memory transferCalldata = abi.encodeWithSignature(
+            'onTokenTransfer(address,uint256,bytes)',
+            msg.sender,
+            value,
+            data
+        );
+        (bool success, bytes memory returnData) = to.call(transferCalldata);
+        require(
+            success && (returnData.length == 0 || abi.decode(returnData, (bool))),
+            'onTokenTransfer failed'
+        );
 
         return true;
     }
