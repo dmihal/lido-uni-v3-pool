@@ -17,6 +17,8 @@ import { ERC20 } from "./ERC20.sol";
 
 /// @title MetaPool for allocating to the Lido stETH Uniswap V3 Pool
 /// @author David Mihal
+/// @notice Uses the "pauser" role inherited from the ERC20 contract.
+///         Pauser only has the ability to pause deposits and rebalances, users may withdraw at any time.
 contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   using LowGasSafeMath for uint256;
   using LowGasSafeMath for uint128;
