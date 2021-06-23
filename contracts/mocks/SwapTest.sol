@@ -15,7 +15,7 @@ contract SwapTest is IUniswapV3SwapCallback {
         external
     {
         IUniswapV3Pool(pool).swap(
-            address(0),
+            address(1),
             zeroForOne,
             amountSpecified,
             zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
@@ -34,7 +34,7 @@ contract SwapTest is IUniswapV3SwapCallback {
         for (uint i = 0; i < numTrades; i++) {
             bool zeroForOne = i % ratio > 0;
             IUniswapV3Pool(pool).swap(
-                address(0),
+                address(1),
                 zeroForOne,
                 amountSpecified,
                 zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
@@ -62,7 +62,7 @@ contract SwapTest is IUniswapV3SwapCallback {
         )
     {
         (amount0Delta, amount1Delta) = IUniswapV3Pool(pool).swap(
-            address(0),
+            address(1),
             zeroForOne,
             amountSpecified,
             sqrtPriceLimitX96,
