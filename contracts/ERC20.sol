@@ -7,6 +7,10 @@ interface ERC677Receiver {
     function onTokenTransfer(address _sender, uint _value, bytes calldata _data) external;
 }
 
+/// @notice Modified from the Uniswap V2 ERC20 contract
+///         Adds a built-in "pauser" role which can be used by inherited contracts.
+///         Pauser is added to this contract in order to minimize SLOAD operations, by
+///         packing the paused variable into the same sloat as the totalSupply variable
 contract ERC20 {
     using LowGasSafeMath for uint;
 
