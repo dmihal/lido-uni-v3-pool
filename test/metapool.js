@@ -59,6 +59,8 @@ async function logRebalance(call) {
 
   const { interface } = await ethers.getContractFactory('UniswapV3Pool');
 
+  let ratio;
+
   for (const event of events) {
     switch (event.event || event.topics[0]) {
       case interface.getEventTopic('Collect'):
@@ -80,7 +82,7 @@ async function logRebalance(call) {
         }
         break;
       case 'Rebalanced':
-        const ratio = event.args.newTightLiquidity.toString() / event.args.newWideLiquidity.toString();
+        ratio = event.args.newTightLiquidity.toString() / event.args.newWideLiquidity.toString();
         console.log(`Rebalanced: added ${event.args.newTightLiquidity.toString()} tight & `
           + `${event.args.newWideLiquidity.toString()} wide`
           + ` -- ${event.args.amount0Remainder.toString()} token0 & `
@@ -88,6 +90,7 @@ async function logRebalance(call) {
         break;
     }
   }
+  return { ratio };
 }
 
 describe('MetaPools', function() {
@@ -530,14 +533,15 @@ describe('MetaPools', function() {
             const startingTightPositionAmounts = await metaPool.tightPosition();
             const startingWidePositionAmounts = await metaPool.widePosition();
 
-            await logRebalance(metaPool.rebalance());
+            const { ratio } = await logRebalance(metaPool.rebalance());
+            expect(ratio).to.equal(8);
 
             const endTightPositionAmounts = await metaPool.tightPosition();
             const endWidePositionAmounts = await metaPool.widePosition();
 
             const liquidityRatio = endTightPositionAmounts.liquidity.toString()
               / endWidePositionAmounts.liquidity.toString();
-            expect(liquidityRatio).to.be.closeTo(LIQUIDITY_RATIO, 0.0001);
+            expect(liquidityRatio).to.equal(LIQUIDITY_RATIO);
 
             expect(toInt(endTightPositionAmounts.liquidity))
               .to.be.greaterThan(toInt(startingTightPositionAmounts.liquidity));
@@ -569,14 +573,15 @@ describe('MetaPools', function() {
               const startingTightPositionAmounts = await metaPool.tightPosition();
               const startingWidePositionAmounts = await metaPool.widePosition();
 
-              await logRebalance(metaPool.rebalance());
+              const { ratio } = await logRebalance(metaPool.rebalance());
+              expect(ratio).to.equal(8);
 
               const endTightPositionAmounts = await metaPool.tightPosition();
               const endWidePositionAmounts = await metaPool.widePosition();
 
               const liquidityRatio = endTightPositionAmounts.liquidity.toString()
                 / endWidePositionAmounts.liquidity.toString();
-              expect(liquidityRatio).to.be.closeTo(LIQUIDITY_RATIO, 0.0001);
+              expect(liquidityRatio).to.equal(LIQUIDITY_RATIO);
 
               expect(toInt(endTightPositionAmounts.liquidity))
                 .to.be.greaterThan(toInt(startingTightPositionAmounts.liquidity));
@@ -642,14 +647,15 @@ describe('MetaPools', function() {
             const startingTightPositionAmounts = await metaPool.tightPosition();
             const startingWidePositionAmounts = await metaPool.widePosition();
 
-            await logRebalance(metaPool.rebalance());
+            const { ratio } = await logRebalance(metaPool.rebalance());
+            expect(ratio).to.equal(8);
 
             const endTightPositionAmounts = await metaPool.tightPosition();
             const endWidePositionAmounts = await metaPool.widePosition();
 
             const liquidityRatio = endTightPositionAmounts.liquidity.toString()
               / endWidePositionAmounts.liquidity.toString();
-            expect(liquidityRatio).to.be.closeTo(LIQUIDITY_RATIO, 0.0001);
+            expect(liquidityRatio).to.equal(LIQUIDITY_RATIO);
 
             expect(toInt(endTightPositionAmounts.liquidity))
               .to.be.greaterThan(toInt(startingTightPositionAmounts.liquidity));

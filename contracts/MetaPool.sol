@@ -450,13 +450,13 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
       uint128 tightLiquidity1 = LiquidityAmounts.getLiquidityForAmount1(
         tightLowerSqrtRatioX96,
         sqrtRatioX96,
-        token1Wide
+        token1Tight
       );
 
       uint128 wideLiquidity0 = LiquidityAmounts.getLiquidityForAmount0(
         sqrtRatioX96,
         wideUpperSqrtRatioX96,
-        token0Tight
+        token0Wide
       );
       uint128 wideLiquidity1 = LiquidityAmounts.getLiquidityForAmount1(
         wideLowerSqrtRatioX96,
