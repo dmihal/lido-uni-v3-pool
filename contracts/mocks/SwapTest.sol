@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.7.6;
+pragma solidity 0.7.6;
 
 import { IERC20Minimal } from "../uniswap-v3/interfaces/IERC20Minimal.sol";
 import { IUniswapV3SwapCallback } from "../uniswap-v3/interfaces/callback/IUniswapV3SwapCallback.sol";
