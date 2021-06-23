@@ -560,8 +560,8 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
   }
 
   /// @notice Takes a tight & wide liquidity amount, and rounds them down so they match the liquidity ratio
-  /// @param tightLiquidity Input amount of tight liquidity
-  /// @param wideLiquidity Input amount of wide liquidity
+  /// @param _tightLiquidity Input amount of tight liquidity
+  /// @param _wideLiquidity Input amount of wide liquidity
   /// @return Output rounded amount of tight liquidity
   /// @return Output rounded amount of wide liquidity
   function balanceLiquidity(
