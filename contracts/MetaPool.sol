@@ -339,7 +339,7 @@ contract MetaPool is IUniswapV3MintCallback, IUniswapV3SwapCallback, ERC20 {
         uint128(wideAmount0), // cast can't overflow
         uint128(wideAmount1) // cast can't overflow
       );
-      require(amount0Collected >= wideAmount0 || amount1Collected >= wideAmount1);
+      require(amount0Collected >= wideAmount0 && amount1Collected >= wideAmount1);
 
       // Can't overflow
       amount0 += amount0Collected;
