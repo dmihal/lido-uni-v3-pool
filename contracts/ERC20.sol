@@ -1,12 +1,12 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.7.0;
+pragma solidity 0.7.6;
 
 import './uniswap-v3/libraries/LowGasSafeMath.sol';
 
-interface ERC677Receiver {
-    function onTokenTransfer(address _sender, uint _value, bytes calldata _data) external;
-}
-
+/// @notice Modified from the Uniswap V2 ERC20 contract
+///         Adds a built-in "pauser" role which can be used by inherited contracts.
+///         Pauser is added to this contract in order to minimize SLOAD operations, by
+///         packing the paused variable into the same sloat as the totalSupply variable
 contract ERC20 {
     using LowGasSafeMath for uint;
 
@@ -59,6 +59,7 @@ contract ERC20 {
 
     function transferPauser(address newPauser) external {
         require(pauser == msg.sender);
+        require(newPauser != address(0));
         emit PauserTransferred(pauser, newPauser);
         pauser = newPauser;
     }
@@ -81,17 +82,20 @@ contract ERC20 {
     }
 
     function _burn(address from, uint value) internal {
+        require(from != address(0));
         balanceOf[from] = balanceOf[from].sub(value);
         totalSupply = uint248(uint(totalSupply).sub(value));
         emit Transfer(from, address(0), value);
     }
 
     function _approve(address owner, address spender, uint value) private {
+        require(spender != address(0));
         allowance[owner][spender] = value;
         emit Approval(owner, spender, value);
     }
 
     function _transfer(address from, address to, uint value) private {
+        require(to != address(0));
         balanceOf[from] = balanceOf[from].sub(value);
         balanceOf[to] = balanceOf[to].add(value);
         emit Transfer(from, to, value);
@@ -99,6 +103,18 @@ contract ERC20 {
 
     function approve(address spender, uint value) external returns (bool) {
         _approve(msg.sender, spender, value);
+        return true;
+    }
+
+    /// @notice Non-standard function to avoid issues with ERC-20 approve
+    function increaseAllowance(address spender, uint256 addedValue) external returns (bool) {
+        _approve(msg.sender, spender, allowance[msg.sender][spender].add(addedValue));
+        return true;
+    }
+
+    /// @notice Non-standard function to avoid issues with ERC-20 approve
+    function decreaseAllowance(address spender, uint256 subtractedValue) external returns (bool) {
+        _approve(msg.sender, spender, allowance[msg.sender][spender].sub(subtractedValue));
         return true;
     }
 
@@ -116,7 +132,7 @@ contract ERC20 {
     }
 
     function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
-        require(deadline >= block.timestamp, 'UniswapV2: EXPIRED');
+        require(deadline >= block.timestamp, 'EXPIRED');
         bytes32 digest = keccak256(
             abi.encodePacked(
                 '\x19\x01',
@@ -125,7 +141,7 @@ contract ERC20 {
             )
         );
         address recoveredAddress = ecrecover(digest, v, r, s);
-        require(recoveredAddress != address(0) && recoveredAddress == owner, 'UniswapV2: INVALID_SIGNATURE');
+        require(recoveredAddress != address(0) && recoveredAddress == owner, 'INVALID_SIGNATURE');
         _approve(owner, spender, value);
     }
 
@@ -136,7 +152,19 @@ contract ERC20 {
 
         _transfer(msg.sender, to, value);
 
-        ERC677Receiver(to).onTokenTransfer(msg.sender, value, data);
+        // Some implementations of ERC677 receivers return a boolean, some don't return
+        // anything. We'll support both using a low-level call, similar to TransferHelper
+        bytes memory transferCalldata = abi.encodeWithSignature(
+            'onTokenTransfer(address,uint256,bytes)',
+            msg.sender,
+            value,
+            data
+        );
+        (bool success, bytes memory returnData) = to.call(transferCalldata);
+        require(
+            success && (returnData.length == 0 || abi.decode(returnData, (bool))),
+            'onTokenTransfer failed'
+        );
 
         return true;
     }
